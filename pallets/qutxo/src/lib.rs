@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 pub use pallet::*;
 
+mod merkle;
 #[cfg(test)]
 mod tests;
 #[frame_support::pallet]
@@ -26,6 +27,13 @@ pub mod pallet {
     #[pallet::storage] #[pallet::getter(fn total_issuance)]
     pub type TotalIssuance<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn utxo_set_root)]
+    pub type UtxoSetRoot<T: Config> = StorageValue<_, sp_core::H256, ValueQuery>;
+
+    #[pallet::storage]
+    pub type UtxoSetDirty<T: Config> = StorageValue<_, bool, ValueQuery>;
+
     #[derive(Clone, Encode, Decode, parity_scale_codec::DecodeWithMemTracking, PartialEq, Eq, RuntimeDebug, TypeInfo)]
     pub struct Transaction<Balance> {
         pub inputs: Vec<TransactionInput>, pub outputs: Vec<TransactionOutput<Balance>>,
@@ -35,6 +43,16 @@ pub mod pallet {
     pub enum Event<T: Config> { TransactionExecuted { tx_hash: sp_core::H256, value: T::Balance } }
     #[pallet::error]
     pub enum Error<T> { UtxoDoesNotExist, ValueMismatch, TransactionTooLarge, InvalidPqSignature }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_finalize(_n: BlockNumberFor<T>) {
+            if UtxoSetDirty::<T>::take() {
+                let root = Self::compute_utxo_set_root();
+                UtxoSetRoot::<T>::put(root);
+            }
+        }
+    }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
@@ -60,12 +78,14 @@ pub mod pallet {
                 let utxo = UtxoSet::<T>::get(utxo_hash).ok_or(Error::<T>::UtxoDoesNotExist)?;
                 total_input_value = total_input_value.saturating_add(utxo.value);
                 UtxoSet::<T>::remove(utxo_hash);
+                    Self::mark_utxo_set_dirty();
             }
             let mut total_output_value = T::Balance::default();
             for (idx, output) in tx.outputs.iter().enumerate() {
                 total_output_value = total_output_value.saturating_add(output.value);
                 let new_utxo_hash = Self::calculate_utxo_hash(tx_hash, idx as u32);
                 UtxoSet::<T>::insert(new_utxo_hash, Utxo { value: output.value, lock: output.lock.clone() });
+            Self::mark_utxo_set_dirty();
             }
             ensure!(total_input_value >= total_output_value, Error::<T>::ValueMismatch);
             Self::deposit_event(Event::TransactionExecuted { tx_hash, value: total_output_value });
@@ -89,6 +109,7 @@ pub mod pallet {
             
             // Inject into state and update total issuance
             UtxoSet::<T>::insert(utxo_hash, new_utxo);
+            Self::mark_utxo_set_dirty();
             let current = TotalIssuance::<T>::get();
             TotalIssuance::<T>::put(current.saturating_add(value));
             
@@ -98,6 +119,30 @@ pub mod pallet {
 
     }
     impl<T: Config> Pallet<T> {
+        /// Recompute the UTXO set root from scratch.
+        ///
+        /// O(n log n) in the number of UTXOs. Acceptable for testnet.
+        /// Phase 7.2 will replace the body with an incremental SMT update
+        /// while keeping this call site intact.
+        pub fn compute_utxo_set_root() -> sp_core::H256 {
+            crate::merkle::utxo_set_root(
+                UtxoSet::<T>::iter()
+                    .map(|(id, utxo)| (id, Self::hash_utxo(&utxo))),
+            )
+        }
+
+        /// Hash of a single UTXO's value. Uses SCALE encoding under a
+        /// domain separator; do not change without also bumping the
+        /// circuit's commitment scheme.
+        fn hash_utxo(utxo: &Utxo<T::Balance>) -> sp_core::H256 {
+            sp_core::H256::from(sp_core::hashing::blake2_256(&utxo.encode()))
+        }
+
+        /// Call from every path that mutates `UtxoSet`.
+        pub fn mark_utxo_set_dirty() {
+            UtxoSetDirty::<T>::put(true);
+        }
+
         pub fn calculate_utxo_hash(tx_hash: sp_core::H256, output_index: u32) -> sp_core::H256 {
             let mut bytes = Vec::new();
             bytes.extend_from_slice(tx_hash.as_bytes());
