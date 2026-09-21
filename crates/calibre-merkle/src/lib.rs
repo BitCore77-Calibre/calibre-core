@@ -95,26 +95,6 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod equivalence {
-    use super::*;
-    #[test]
-    fn matches_sp_core() {
-        for input in [
-            b"".as_slice(),
-            b"hello".as_slice(),
-            &[0u8; 65][..],
-            &[0xffu8; 200][..],
-        ] {
-            assert_eq!(
-                blake2_256(input),
-                sp_core::hashing::blake2_256(input),
-                "mismatch on input len {}",
-                input.len()
-            );
-        }
-    }
-}
 
 #[cfg(test)]
 mod equivalence {
