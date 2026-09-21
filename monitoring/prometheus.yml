@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 6s
+  evaluation_interval: 6s
+
+scrape_configs:
+  - job_name: calibre-node
+    static_configs:
+      - targets: ["node:9615"]
+        labels:
+          chain: calibre_testnet_1

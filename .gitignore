@@ -1,0 +1,12 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node.js
+node_modules/
+tools/faucet/node_modules/
+
+# Local keys & temp data
+*.calibre-pq-key
+/tmp/
+chain-specs/*.sha256

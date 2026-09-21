@@ -1,0 +1,22 @@
+[package]
+name = "pallet-qutxo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+parity-scale-codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+calibre-primitives = { workspace = true }
+calibre-aegis-crypto = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["parity-scale-codec/std", "scale-info/std", "frame-support/std", "frame-system/std", "sp-core/std", "sp-runtime/std", "sp-std/std", "calibre-primitives/std", "calibre-aegis-crypto/std"]
+
+[dev-dependencies]
+sp-io = { workspace = true, features = ["std"] }

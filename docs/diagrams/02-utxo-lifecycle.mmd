@@ -1,0 +1,46 @@
+sequenceDiagram
+    autonumber
+    participant User
+    participant Wallet as Wallet (pq-signer)
+    participant Pool as Mempool<br/>(Conflict Detector)
+    participant Chain as Block Execution<br/>(pallet-qutxo)
+    participant WASM as Crypto Verifier<br/>(ML-DSA-44)
+
+    Note over User,WASM: Genesis mint
+    User->>Chain: sudo_mint(1B, recipient_lock)
+    Chain->>Chain: UtxoSet.insert(hash, Utxo{value, lock})
+    Chain-->>User: UTXO #1 created
+
+    Note over User,WASM: Spend attempt
+    User->>Wallet: "send 400M to X, 600M change"
+    Wallet->>Wallet: build SCALE payload
+    Wallet->>WASM: sign(payload, private_key)
+    WASM-->>Wallet: 2420-byte ML-DSA-44 sig
+    Wallet->>Pool: submit(unsigned_extrinsic)
+
+    Pool->>Pool: check per-input conflict tags
+    alt conflict with pending tx
+        Pool-->>Wallet: ❌ "Priority too low"
+    else no conflict
+        Pool->>Pool: check UtxoSet.contains_key()
+        alt UTXO already spent
+            Pool-->>Wallet: ❌ "Transaction is outdated"
+        else UTXO live
+            Pool->>Chain: accepted, awaiting block
+            Chain->>WASM: verify_aegis_transaction()
+            WASM->>WASM: blake2_256(witness_pubkey) == lock?
+            alt lock mismatch
+                WASM-->>Chain: ❌ LockMismatch
+            else lock matches
+                WASM->>WASM: MlDsaKeyPair::verify(sig, payload, pk)
+                alt sig invalid
+                    WASM-->>Chain: ❌ SignatureVerificationFailed
+                else sig valid
+                    WASM-->>Chain: ✅ Ok
+                    Chain->>Chain: destroy input UTXO
+                    Chain->>Chain: create 2 child UTXOs
+                    Chain-->>User: ✅ 400M + 600M UTXOs
+                end
+            end
+        end
+    end

@@ -1,0 +1,24 @@
+flowchart LR
+    TX[Signed UTXO Spend<br/>~3,950 bytes] --> G1
+    
+    G1{Gate 1<br/>Mempool<br/>Conflict Tag} -->|Conflict| X1[❌ Rejected<br/>Priority too low]
+    G1 -->|No Conflict| G2
+    
+    G2{Gate 2<br/>State<br/>UtxoSet::contains} -->|Missing| X2[❌ Rejected<br/>Transaction is outdated]
+    G2 -->|Exists| G3
+    
+    G3{Gate 3<br/>Runtime<br/>lock == hash pk} -->|Mismatch| X3[❌ Rejected<br/>LockMismatch]
+    G3 -->|Match| G4
+    
+    G4{Gate 4<br/>Crypto<br/>ML-DSA-44 verify} -->|Invalid| X4[❌ Rejected<br/>SignatureVerificationFailed]
+    G4 -->|Valid| OK[✅ Included in block<br/>~6 seconds]
+
+    style G1 fill:#0d1117,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+    style G2 fill:#0d1117,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+    style G3 fill:#0d1117,stroke:#f7931a,stroke-width:2px,color:#e6edf3
+    style G4 fill:#0d1117,stroke:#f7931a,stroke-width:2px,color:#e6edf3
+    style OK fill:#0d2e14,stroke:#3fb950,stroke-width:3px,color:#e6edf3
+    style X1 fill:#2d0f0f,stroke:#f85149,color:#e6edf3
+    style X2 fill:#2d0f0f,stroke:#f85149,color:#e6edf3
+    style X3 fill:#2d0f0f,stroke:#f85149,color:#e6edf3
+    style X4 fill:#2d0f0f,stroke:#f85149,color:#e6edf3

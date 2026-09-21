@@ -1,0 +1,53 @@
+services:
+  node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: calibre-node:testnet
+    container_name: calibre-node
+    restart: unless-stopped
+    ports:
+      - "9944:9944"     # JSON-RPC / WebSocket
+      - "30333:30333"   # P2P
+      - "9615:9615"     # Prometheus metrics
+    volumes:
+      - node-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9944 -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"system_health\",\"params\":[]}' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  faucet:
+    image: calibre-node:testnet
+    container_name: calibre-faucet
+    restart: unless-stopped
+    depends_on:
+      node:
+        condition: service_healthy
+    environment:
+      CALIBRE_RPC: http://node:9944
+      CALIBRE_WS:  ws://node:9944
+      FAUCET_PORT: "8090"
+    ports:
+      - "8090:8090"
+    working_dir: /app
+    command: ["python3", "/app/tools/faucet/faucet.py"]
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: calibre-prometheus
+    restart: unless-stopped
+    depends_on:
+      - node
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+
+volumes:
+  node-data:

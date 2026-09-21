@@ -1,0 +1,46 @@
+graph TB
+    subgraph Users["👥 Users"]
+        U1[Mobile Wallet]
+        U2[Web Console]
+        U3[CLI / pq-signer]
+    end
+
+    subgraph Calibre["⚡ CALIBRE LAYER-1"]
+        subgraph Consensus["Consensus Layer"]
+            AURA[Aura<br/>Block Production<br/>6s slots]
+            GRANDPA[GRANDPA<br/>Finality<br/>~12s]
+        end
+
+        subgraph Execution["Q-UTXO Execution Layer"]
+            MEMPOOL[Fast-Path<br/>Mempool<br/>Conflict Detector]
+            PALLET[pallet-qutxo<br/>State Machine]
+            SET[(UtxoSet<br/>RocksDB)]
+        end
+
+        subgraph Crypto["Post-Quantum Crypto Layer"]
+            AEGIS[A.E.G.I.S.<br/>ML-DSA-44<br/>Verification]
+            QR_CKD[QR-CKD<br/>Context Derivation]
+        end
+    end
+
+    subgraph Interop["🌉 Interoperability"]
+        SOLVERS[Solver Network]
+        ZK[ZK Intent Bridge<br/>roadmap]
+        ETH[Ethereum / L2s]
+    end
+
+    U1 & U2 & U3 -->|RPC :9944| MEMPOOL
+    MEMPOOL --> PALLET
+    PALLET <--> SET
+    PALLET --> AEGIS
+    PALLET --> QR_CKD
+    AURA --> PALLET
+    PALLET --> GRANDPA
+    SOLVERS -.->|Intent settlement| ZK
+    ZK -.->|Proof of source tx| ETH
+
+    style Calibre fill:#161b22,stroke:#f7931a,stroke-width:3px,color:#e6edf3
+    style Crypto fill:#1a0e00,stroke:#f7931a,stroke-width:2px,color:#e6edf3
+    style Execution fill:#0d1117,stroke:#58a6ff,stroke-width:2px,color:#e6edf3
+    style Consensus fill:#0d1117,stroke:#3fb950,stroke-width:2px,color:#e6edf3
+    style Interop fill:#0d1117,stroke:#8957e5,stroke-width:2px,color:#e6edf3

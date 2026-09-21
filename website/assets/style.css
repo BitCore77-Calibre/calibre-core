@@ -1,0 +1,218 @@
+/* Calibre Protocol — site stylesheet */
+
+:root {
+  --bg:       #0b0e14;
+  --surface:  #161b22;
+  --border:   #21262d;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --accent:   #f7931a;
+  --accent-2: #58a6ff;
+  --success:  #3fb950;
+  --danger:   #f85149;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre, .mono { font-family: ui-monospace, 'SF Mono', monospace; }
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(11,14,20,0.85);
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.brand {
+  font-weight: 800;
+  letter-spacing: 3px;
+  font-size: 14px;
+}
+.brand span { color: var(--accent); }
+
+.links a {
+  margin-left: 28px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+.links a:hover { color: var(--text); text-decoration: none; }
+
+header.hero {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 100px 40px 60px;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: 52px;
+  line-height: 1.1;
+  margin: 0 0 24px;
+  letter-spacing: -1px;
+}
+.hero h1 span { color: var(--accent); }
+
+.lead {
+  font-size: 19px;
+  color: var(--muted);
+  max-width: 680px;
+  margin: 0 auto 36px;
+}
+
+.cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  transition: filter 0.15s ease;
+}
+.btn:hover { filter: brightness(1.1); text-decoration: none; }
+.btn.primary { background: var(--accent); color: #0b0e14; }
+.btn.ghost   { border: 1px solid var(--border); color: var(--text); }
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.badge {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 60px 40px;
+}
+
+section h2 {
+  font-size: 32px;
+  margin: 0 0 16px;
+  letter-spacing: -0.5px;
+}
+
+.section-lead {
+  color: var(--muted);
+  font-size: 17px;
+  max-width: 720px;
+  margin: 0 0 40px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  color: var(--accent);
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+.checks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+.checks li {
+  background: var(--surface);
+  border-left: 3px solid var(--success);
+  border-radius: 0 8px 8px 0;
+  padding: 14px 18px;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+.checks li b { color: var(--text); }
+
+pre.code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+code {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  color: var(--accent-2);
+}
+
+.roadmap .card.done  { border-left: 3px solid var(--success); }
+.roadmap .card.next  { border-left: 3px solid var(--accent); }
+.roadmap .card.plan  { border-left: 3px solid var(--border); }
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 60px;
+}
+footer .small { font-size: 12px; opacity: 0.75; margin-top: 8px; }
+
+@media (max-width: 640px) {
+  .hero h1 { font-size: 34px; }
+  nav { padding: 16px 20px; }
+  .links a { margin-left: 14px; font-size: 13px; }
+  section { padding: 40px 20px; }
+  header.hero { padding: 60px 20px 40px; }
+}

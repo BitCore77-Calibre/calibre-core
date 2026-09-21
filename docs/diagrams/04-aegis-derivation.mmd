@@ -1,0 +1,24 @@
+flowchart TB
+    subgraph Inputs["Three independent inputs"]
+        E[Eᵢ — Biometric Entropy<br/>FaceID / TouchID / PUF]
+        A[Aᵢ — Device Attestation<br/>AppAttest / Play Integrity]
+        T[Tᵢ — Time Drift<br/>current block timestamp]
+    end
+
+    E & A & T --> H[Hash:<br/>SHAKE256 Eᵢ‖Aᵢ‖Tᵢ]
+    H --> KDF[PQ-KDF<br/>Kyber-based]
+    KDF --> S1[Share 1<br/>Secure Enclave]
+    KDF --> S2[Share 2<br/>Secondary Device]
+    KDF --> S3[Share 3<br/>Encrypted Cloud]
+
+    S1 & S2 -.->|2-of-3 threshold| SK[SK reconstructed<br/>IN VOLATILE MEMORY ONLY]
+    S3 -.->|Lagrange interp| SK
+    
+    SK --> SIGN[Sign transaction]
+    SIGN --> WIPE[Memory wiped<br/>milliseconds later]
+
+    style E fill:#0d1117,stroke:#58a6ff,color:#e6edf3
+    style A fill:#0d1117,stroke:#58a6ff,color:#e6edf3
+    style T fill:#0d1117,stroke:#58a6ff,color:#e6edf3
+    style SK fill:#2d1a00,stroke:#f7931a,stroke-width:3px,color:#e6edf3
+    style WIPE fill:#0d2e14,stroke:#3fb950,color:#e6edf3

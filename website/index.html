@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibre Protocol — A Quantum-Resistant Layer-1</title>
+<meta name="description" content="Calibre is a post-quantum Layer-1 blockchain with real ML-DSA-44 verification on-chain.">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<nav>
+  <div class="brand">CALIBRE <span>PROTOCOL</span></div>
+  <div class="links">
+    <a href="#architecture">Architecture</a>
+    <a href="#features">Features</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#github">GitHub</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <h1>Post-quantum money,<br><span>proven on-chain.</span></h1>
+  <p class="lead">
+    Calibre is a Layer-1 blockchain that replaces elliptic-curve cryptography
+    with FIPS 204 ML-DSA-44 lattice signatures in the value path. Every spend
+    is verified in WASM. Every forgery is rejected at block execution.
+  </p>
+  <div class="cta">
+    <a class="btn primary" href="#quickstart">Run the testnet</a>
+    <a class="btn ghost" href="#github">Read the whitepaper</a>
+  </div>
+  <div class="badges">
+    <span class="badge">ML-DSA-44</span>
+    <span class="badge">Quantum-Lock</span>
+    <span class="badge">Fast-Path Mempool</span>
+    <span class="badge">Docker one-liner</span>
+  </div>
+</header>
+
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p class="section-lead">
+    Calibre's Q-UTXO state model treats the transaction — not the account —
+    as the atomic unit of money. Every unit of value is an unspent output
+    cryptographically bound to a post-quantum lock.
+  </p>
+  <div class="grid">
+    <div class="card">
+      <h3>Quantum-UTXO</h3>
+      <p>State is a map from UTXO ID to (value, lock). No accounts, no nonces.
+      Conflicts between transactions are syntactic, checkable in microseconds.</p>
+    </div>
+    <div class="card">
+      <h3>Four verification gates</h3>
+      <p>Mempool conflict tags. State existence. Runtime lock binding.
+      Cryptographic signature. Each gate rejects a distinct attack class.</p>
+    </div>
+    <div class="card">
+      <h3>Real ML-DSA-44</h3>
+      <p>1,312-byte public keys, 2,420-byte signatures, verified on every
+      spend by dilithium-rs inside the WASM runtime.</p>
+    </div>
+    <div class="card">
+      <h3>Forkless migration</h3>
+      <p>The QuantumLock enum allows governance-driven cryptographic change
+      without a chain fork. Pure-PQ today, hybrid classical+PQ whenever needed.</p>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <h2>What is proven, not claimed</h2>
+  <ul class="checks">
+    <li><b>Forgery rejection.</b> A random 2,420-byte signature is accepted by the mempool (which does not verify crypto) and rejected at block execution. The UTXO set is unchanged.</li>
+    <li><b>Double-spend rejection.</b> Two conflicting transactions submitted in parallel: one wins, the other is rejected with <code>Priority is too low</code>.</li>
+    <li><b>Replay rejection.</b> Re-submitting a spend after inclusion returns <code>Transaction is outdated</code> — without consuming block space.</li>
+    <li><b>Conservation of mass.</b> Every spend satisfies <code>Σ inputs ≥ Σ outputs</code>. Issuance is not affected by transfers.</li>
+    <li><b>Named testnet.</b> Chain ID <code>calibre_testnet_1</code>, SHA-256 fingerprint <code>7b7ba4d1...</code>.</li>
+  </ul>
+</section>
+
+<section id="quickstart">
+  <h2>Run it in 30 seconds</h2>
+  <p class="section-lead">Prerequisite: <a href="https://docs.docker.com/get-docker/">Docker</a>.</p>
+  <pre class="code">
+git clone https://github.com/calibre-protocol/calibre-template
+cd calibre-template
+docker compose up
+
+# In another terminal:
+docker compose exec node pq-signer keygen > pubkey.txt
+curl -X POST http://127.0.0.1:8090/faucet \
+  -H 'Content-Type: application/json' \
+  -d "{\"pubkey\": \"$(cat pubkey.txt)\"}"
+
+# You now hold 1,000,000,000 testnet CAL, cryptographically
+# bound to a Dilithium public key only your private key can spend.</pre>
+</section>
+
+<section id="roadmap">
+  <h2>Roadmap</h2>
+  <div class="grid roadmap">
+    <div class="card done"><h3>Phases 1–6</h3><p>Q-UTXO engine · ML-DSA-44 on-chain · Console · Fast-Path mempool · Faucet · Docker</p></div>
+    <div class="card next"><h3>Phase 6.6</h3><p>Multi-validator testnet — 4 authorities, bootnodes, P2P discovery.</p></div>
+    <div class="card plan"><h3>Phase 7–8</h3><p>Light nodes with ZK state proofs · benchmarks · fuzzing · third-party audit.</p></div>
+    <div class="card plan"><h3>Phase 9–11</h3><p>ZK Intent Bridge · ZkShield private UTXOs · mainnet.</p></div>
+  </div>
+</section>
+
+<section id="github">
+  <h2>Repository</h2>
+  <p class="section-lead">
+    Full source, whitepaper, diagrams, and testnet deployment:
+  </p>
+  <a class="btn primary" href="https://github.com/calibre-protocol/calibre-template">github.com/calibre-protocol/calibre-template</a>
+</section>
+
+<footer>
+  <p>Calibre Protocol · Testnet v0.6.0 · GPL-3.0-only</p>
+  <p class="small">
+    Calibre is a research prototype. It has not been audited. Do not use it
+    for real value transfer. See <a href="https://github.com/calibre-protocol/calibre-template/blob/master/SECURITY.md">SECURITY.md</a>.
+  </p>
+</footer>
+</body>
+</html>
