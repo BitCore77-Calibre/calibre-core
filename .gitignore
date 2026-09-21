@@ -10,3 +10,5 @@ tools/faucet/node_modules/
 *.calibre-pq-key
 /tmp/
 chain-specs/*.sha256
+diag2.sh
+zk/target/
