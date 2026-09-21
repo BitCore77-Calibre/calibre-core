@@ -22,47 +22,37 @@ NODES=(
   "One 30339 9950"
 )
 
-echo "Step 1: preparing keystores for all 7..."
-ALICE_PEER=""
+echo "=== Step 1: prepare keystores + node keys ==="
 for entry in "${NODES[@]}"; do
   NAME=$(echo $entry | awk '{print $1}')
   BP="$BASE/$NAME"
   mkdir -p "$BP"
 
-  # Fresh node key
-  PEER=$($BIN key generate-node-key --chain "$SPEC" --base-path "$BP" 2>&1 | grep -oP '12D3KooW[A-Za-z0-9]+' | head -1)
-
-  # Session keys
-  $BIN key insert --chain "$SPEC" --base-path "$BP" --scheme Sr25519 --suri "//$NAME" --key-type aura >/dev/null 2>&1
-  $BIN key insert --chain "$SPEC" --base-path "$BP" --scheme Ed25519 --suri "//$NAME" --key-type gran >/dev/null 2>&1
-
+  PEER=$("$BIN" key generate-node-key --chain "$SPEC" --base-path "$BP" 2>&1 | grep -oE '12D3KooW[A-Za-z0-9]+' | head -1)
+  "$BIN" key insert --chain "$SPEC" --base-path "$BP" --scheme Sr25519 --suri "//$NAME" --key-type aura >/dev/null 2>&1
+  "$BIN" key insert --chain "$SPEC" --base-path "$BP" --scheme Ed25519 --suri "//$NAME" --key-type gran >/dev/null 2>&1
   echo "  $NAME -> $PEER"
-  if [ "$NAME" = "Alice" ]; then ALICE_PEER="$PEER"; fi
+
+  if [ "$NAME" = "Alice" ]; then
+    echo "$PEER" > "$LOG/alice-peer.txt"
+  fi
 done
 
+ALICE_PEER=$(cat "$LOG/alice-peer.txt")
 echo ""
-echo "Bootnode (Alice): $ALICE_PEER"
+echo "Alice peer ID: $ALICE_PEER"
 echo ""
-echo "Step 2: launching Alice first, then waiting 5s before others..."
+echo "=== Step 2: launch Alice alone (no reserved-nodes) ==="
 
-# --- Alice first, WITHOUT --bootnodes ---
-BP="$BASE/Alice"
-nohup $BIN \
-  --chain "$SPEC" \
-  --validator \
-  --force-authoring \
-  --name Alice \
-  --base-path "$BP" \
-  --port 30333 \
-  --rpc-port 9944 \
-  --prometheus-port 9615 \
+"$BIN" --chain "$SPEC" --validator --force-authoring --name Alice \
+  --base-path "$BASE/Alice" --port 30333 --rpc-port 9944 --prometheus-port 9615 \
   > "$LOG/Alice.log" 2>&1 &
-echo "  Alice P2P=30333 RPC=9944"
+echo "  Alice started (PID $!)"
 
-# Give Alice's P2P stack time to bind and start listening
-sleep 5
+sleep 8
 
-# --- Other 6, with --bootnodes pointing to Alice ---
+echo ""
+echo "=== Step 3: launch Bob..One with --reserved-nodes → Alice ==="
 for entry in "${NODES[@]:1}"; do
   NAME=$(echo $entry | awk '{print $1}')
   PORT=$(echo $entry | awk '{print $2}')
@@ -70,38 +60,35 @@ for entry in "${NODES[@]:1}"; do
   PROM=$((9615 + PORT - 30333))
   BP="$BASE/$NAME"
 
-  nohup $BIN \
-    --chain "$SPEC" \
-    --validator \
-    --force-authoring \
-    --name "$NAME" \
-    --base-path "$BP" \
-    --port "$PORT" \
-    --rpc-port "$RPC" \
-    --prometheus-port "$PROM" \
-    --bootnodes "/ip4/127.0.0.1/tcp/30333/p2p/$ALICE_PEER" \
+  "$BIN" --chain "$SPEC" --validator --force-authoring --name "$NAME" \
+    --base-path "$BP" --port "$PORT" --rpc-port "$RPC" --prometheus-port "$PROM" \
+    --reserved-nodes "/ip4/127.0.0.1/tcp/30333/p2p/$ALICE_PEER" \
+    --reserved-only \
     > "$LOG/$NAME.log" 2>&1 &
-  echo "  $NAME P2P=$PORT RPC=$RPC"
+  echo "  $NAME started on :$PORT"
   sleep 0.4
 done
 
 echo ""
-echo "Step 3: waiting 25s..."
+echo "=== Step 4: waiting 25s for consensus ==="
 sleep 25
 
 echo ""
-echo "===== Node status ====="
+echo "════════ Node status ════════"
+printf "  %-8s %-8s %-8s %s\n" "NAME" "BLOCK" "PEERS" "RPC"
 for entry in "${NODES[@]}"; do
   NAME=$(echo $entry | awk '{print $1}')
+  PORT=$(echo $entry | awk '{print $2}')
   RPC=$(echo $entry | awk '{print $3}')
-  BLOCK=$(curl -s --max-time 2 http://127.0.0.1:$RPC -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"chain_getHeader","params":[]}' 2>/dev/null | python3 -c "import sys,json;print(int(json.load(sys.stdin)['result']['number'],16))" 2>/dev/null || echo "?")
-  PEERS=$(curl -s --max-time 2 http://127.0.0.1:$RPC -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"system_health","params":[]}' 2>/dev/null | python3 -c "import sys,json;print(json.load(sys.stdin)['result']['peers'])" 2>/dev/null || echo "?")
-  printf "  %-8s block=%-6s peers=%-3s :%s\n" "$NAME" "$BLOCK" "$PEERS" "$RPC"
+  BLOCK=$(curl -s --max-time 2 http://127.0.0.1:$RPC -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"chain_getHeader","params":[]}' 2>/dev/null \
+    | python3 -c "import sys,json;print(int(json.load(sys.stdin)['result']['number'],16))" 2>/dev/null || echo "?")
+  PEERS=$(curl -s --max-time 2 http://127.0.0.1:$RPC -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"system_health","params":[]}' 2>/dev/null \
+    | python3 -c "import sys,json;print(json.load(sys.stdin)['result']['peers'])" 2>/dev/null || echo "?")
+  printf "  %-8s %-8s %-8s :%s\n" "$NAME" "$BLOCK" "$PEERS" "$RPC"
 done
 
 echo ""
-echo "Check Alice for Aura startup:"
-grep -iE "aura|Starting Aura|consensus" "$LOG/Alice.log" | head -5 || echo "(no Aura lines found)"
-
-echo ""
 echo "Stop: pkill -9 -f solochain-template-node"
+echo "Logs: tail -f $LOG/Alice.log"
