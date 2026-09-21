@@ -1,0 +1,10 @@
+[package]
+name = "calibre_zk_guest"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+risc0-zkvm = { version = "^3.0.6", default-features = false, features = ['std'] }
+calibre-merkle = { path = "../../../crates/calibre-merkle", default-features = false }

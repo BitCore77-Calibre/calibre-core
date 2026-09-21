@@ -63,6 +63,37 @@ where
     level[0]
 }
 
+/// Merkle inclusion path for `target_id` against the same tree
+/// construction `utxo_set_root` uses.
+///
+/// Each element is `(sibling_hash, current_is_left)`:
+///   * `current_is_left == true`  -> current is `inner_hash(current, sibling)`
+///   * `current_is_left == false` -> current is `inner_hash(sibling, current)`
+///
+/// Returns `None` if `target_id` is not in `leaves`.
+pub fn merkle_path(leaves: &[(Hash, Hash)], target_id: &Hash) -> Option<Vec<(Hash, bool)>> {
+    let mut items: Vec<(Hash, Hash)> = leaves.to_vec();
+    items.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut idx = items.iter().position(|(id, _)| id == target_id)?;
+
+    let mut level: Vec<Hash> =
+        items.iter().map(|(id, v)| leaf_hash(id, v)).collect();
+    level.resize(level.len().next_power_of_two(), [0u8; 32]);
+
+    let mut path: Vec<(Hash, bool)> = Vec::new();
+    while level.len() > 1 {
+        path.push((level[idx ^ 1], idx % 2 == 0));
+        let mut next = Vec::with_capacity(level.len() / 2);
+        for pair in level.chunks_exact(2) {
+            next.push(inner_hash(&pair[0], &pair[1]));
+        }
+        level = next;
+        idx /= 2;
+    }
+    Some(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +124,27 @@ mod tests {
         let b = (h(1), h(0xbb));
         assert_ne!(utxo_set_root(vec![a]), utxo_set_root(vec![b]));
     }
+
+    #[test]
+    fn path_reconstructs_root() {
+        let leaves = vec![(h(3), h(0xcc)), (h(1), h(0xaa)), (h(2), h(0xbb))];
+        let root = utxo_set_root(leaves.clone());
+        for (tid, tv) in leaves.iter() {
+            let path = merkle_path(&leaves, tid).expect("leaf present");
+            let mut cur = leaf_hash(tid, tv);
+            for (sib, is_left) in path.iter() {
+                cur = if *is_left { inner_hash(&cur, sib) }
+                      else       { inner_hash(sib, &cur) };
+            }
+            assert_eq!(cur, root, "path for {:?} did not fold to root", tid);
+        }
+    }
+
+    #[test]
+    fn path_missing_leaf_is_none() {
+        let leaves = vec![(h(1), h(0xaa))];
+        assert!(merkle_path(&leaves, &h(99)).is_none());
+    }
 }
 
 
@@ -112,18 +164,3 @@ mod equivalence {
     }
 }
 
-#[cfg(test)]
-mod equivalence {
-    use super::*;
-    #[test]
-    fn matches_sp_core() {
-        for input in [
-            b"".as_slice(),
-            b"hello".as_slice(),
-            &[0u8; 65][..],
-            &[0xffu8; 200][..],
-        ] {
-            assert_eq!(blake2_256(input), sp_core::hashing::blake2_256(input));
-        }
-    }
-}
