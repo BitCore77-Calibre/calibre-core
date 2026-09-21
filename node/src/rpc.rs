@@ -13,6 +13,10 @@ use solochain_template_runtime::{opaque::Block, AccountId, Balance, Nonce};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
+use sp_runtime::traits::Block as BlockT;
+use calibre_qutxo_rpc_api::QutxoApi;
+use calibre_primitives::InclusionProof;
+use sp_core::H256;
 
 /// Full client dependencies.
 pub struct FullDeps<C, P> {
@@ -20,6 +24,51 @@ pub struct FullDeps<C, P> {
 	pub client: Arc<C>,
 	/// Transaction pool instance.
 	pub pool: Arc<P>,
+}
+
+/// Q-UTXO inclusion proof RPC methods.
+#[jsonrpsee::proc_macros::rpc(client, server)]
+pub trait QutxoRpcApi<BlockHash> {
+	/// Fetch the Merkle inclusion proof for one UTXO.
+	#[method(name = "qutxo_getInclusionProof")]
+	fn get_inclusion_proof(
+		&self,
+		utxo_id: H256,
+		at: Option<BlockHash>,
+	) -> jsonrpsee::core::RpcResult<Option<InclusionProof>>;
+}
+
+/// RPC handler for Q-UTXO inclusion queries.
+pub struct QutxoRpc<C> {
+	client: Arc<C>,
+}
+
+impl<C> QutxoRpc<C> {
+	/// Create a new handler with the given client.
+	pub fn new(client: Arc<C>) -> Self {
+		Self { client }
+	}
+}
+
+impl<C> QutxoRpcApiServer<<Block as BlockT>::Hash> for QutxoRpc<C>
+where
+	C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + 'static,
+	C::Api: calibre_qutxo_rpc_api::QutxoApi<Block>,
+{
+	fn get_inclusion_proof(
+		&self,
+		utxo_id: H256,
+		at: Option<<Block as BlockT>::Hash>,
+	) -> jsonrpsee::core::RpcResult<Option<InclusionProof>> {
+		let api = self.client.runtime_api();
+		let at = at.unwrap_or_else(|| self.client.info().best_hash);
+		api.get_inclusion_proof(at, utxo_id)
+			.map_err(|e| jsonrpsee::types::ErrorObject::owned(
+				-32000,
+				format!("Runtime API error: {:?}", e),
+				None::<()>,
+			))
+	}
 }
 
 /// Instantiate all full RPC extensions.
@@ -33,6 +82,7 @@ where
 	C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
 	C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
 	C::Api: BlockBuilder<Block>,
+	C::Api: calibre_qutxo_rpc_api::QutxoApi<Block>,
 	P: TransactionPool + 'static,
 {
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
@@ -42,6 +92,7 @@ where
 	let FullDeps { client, pool } = deps;
 
 	module.merge(System::new(client.clone(), pool).into_rpc())?;
+	module.merge(QutxoRpc::new(client.clone()).into_rpc())?;
 	module.merge(TransactionPayment::new(client).into_rpc())?;
 
 	// Extend this RPC with a custom API by using the following syntax.

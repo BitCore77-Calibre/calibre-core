@@ -9502,6 +9502,8 @@ dependencies = [
 name = "solochain-template-node"
 version = "0.1.0"
 dependencies = [
+ "calibre-primitives",
+ "calibre-qutxo-rpc-api",
  "clap",
  "frame-benchmarking-cli",
  "frame-metadata-hash-extension",

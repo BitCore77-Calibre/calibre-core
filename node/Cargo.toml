@@ -24,6 +24,8 @@ frame-system.default-features = true
 frame-system.workspace = true
 futures = { features = ["thread-pool"], workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
+calibre-primitives = { workspace = true, default-features = false }
+calibre-qutxo-rpc-api = { workspace = true, default-features = false }
 pallet-transaction-payment-rpc.default-features = true
 pallet-transaction-payment-rpc.workspace = true
 pallet-transaction-payment.default-features = true
