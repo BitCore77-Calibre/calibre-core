@@ -6736,9 +6736,6 @@ version = "0.1.0"
 dependencies = [
  "dilithium-rs",
  "hex",
- "sp-core",
- "subxt",
- "tokio",
 ]
 
 [[package]]
@@ -10585,7 +10582,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
- "wasm-bindgen-futures",
  "web-time",
 ]
 
