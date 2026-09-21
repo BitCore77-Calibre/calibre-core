@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibre Mempool — Live Quantum Transaction Flow</title>
+<meta name="description" content="Live simulation of post-quantum transaction flow through four verification gates on Calibre Protocol.">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/mempool.css">
+</head>
+<body class="mempool-page">
+
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+
+<nav>
+  <a href="/calibre-core/" class="brand">
+    <span class="brand-mark"></span>
+    CALIBRE <span class="brand-accent">PROTOCOL</span>
+  </a>
+  <div class="nav-links">
+    <a href="/calibre-core/#architecture">Architecture</a>
+    <a href="/calibre-core/#proof">Proof</a>
+    <a href="/calibre-core/#roadmap">Roadmap</a>
+    <a href="./mempool.html" class="nav-cta" style="background: var(--accent); color: #050810;">Mempool →</a>
+  </div>
+</nav>
+
+<header class="mp-header">
+  <div class="mp-header-inner">
+    <div>
+      <div class="mp-tag">
+        <span class="pulse"></span>
+        SIMULATION · QUANTUM TRANSACTION FLOW
+      </div>
+      <h1>Calibre <span class="grad">Mempool</span></h1>
+      <p class="mp-sub">
+        Watch transactions flow through the four verification gates,
+        get rejected or included in a 6-second block. Toggle chaos mode to
+        inject double-spends, forgeries, and replays.
+      </p>
+    </div>
+    <div class="mp-controls">
+      <button id="btn-pause" class="mp-btn">⏸ Pause</button>
+      <div class="mp-speed">
+        <label>Speed</label>
+        <select id="speed-select">
+          <option value="1">1×</option>
+          <option value="2" selected>2×</option>
+          <option value="5">5×</option>
+          <option value="10">10×</option>
+        </select>
+      </div>
+      <button id="btn-chaos" class="mp-btn mp-btn-danger">☠ Chaos: OFF</button>
+      <button id="btn-reset" class="mp-btn mp-btn-ghost">↺ Reset</button>
+    </div>
+  </div>
+</header>
+
+<section class="mp-metrics">
+  <div class="mp-metric">
+    <div class="mp-metric-label">Block height</div>
+    <div class="mp-metric-value" id="m-height">#0</div>
+  </div>
+  <div class="mp-metric">
+    <div class="mp-metric-label">Mempool</div>
+    <div class="mp-metric-value" id="m-mempool">0</div>
+  </div>
+  <div class="mp-metric">
+    <div class="mp-metric-label">UTXO set</div>
+    <div class="mp-metric-value" id="m-utxo">0</div>
+  </div>
+  <div class="mp-metric">
+    <div class="mp-metric-label">Tx / second</div>
+    <div class="mp-metric-value" id="m-tps">0.0</div>
+  </div>
+  <div class="mp-metric">
+    <div class="mp-metric-label">Gates passed</div>
+    <div class="mp-metric-value mp-green" id="m-passed">0</div>
+  </div>
+  <div class="mp-metric">
+    <div class="mp-metric-label">Gates rejected</div>
+    <div class="mp-metric-value mp-red" id="m-rejected">0</div>
+  </div>
+</section>
+
+<section class="mp-grid">
+
+  <div class="mp-panel mp-gates-panel">
+    <div class="mp-panel-head">
+      <h2>The Four Gates</h2>
+      <span class="mp-panel-sub">every tx passes (or dies) here</span>
+    </div>
+    <div class="mp-gate-row" data-gate="1">
+      <div class="mp-gate-num">1</div>
+      <div class="mp-gate-info">
+        <b>Mempool conflict</b>
+        <span>per-input tag collision</span>
+      </div>
+      <div class="mp-gate-stats">
+        <span class="mp-pass" id="g1-pass">0</span>
+        <span class="mp-fail" id="g1-fail">0</span>
+      </div>
+    </div>
+    <div class="mp-gate-row" data-gate="2">
+      <div class="mp-gate-num">2</div>
+      <div class="mp-gate-info">
+        <b>State existence</b>
+        <span>UtxoSet::contains_key</span>
+      </div>
+      <div class="mp-gate-stats">
+        <span class="mp-pass" id="g2-pass">0</span>
+        <span class="mp-fail" id="g2-fail">0</span>
+      </div>
+    </div>
+    <div class="mp-gate-row" data-gate="3">
+      <div class="mp-gate-num">3</div>
+      <div class="mp-gate-info">
+        <b>Lock binding</b>
+        <span>blake2(pk) == lock</span>
+      </div>
+      <div class="mp-gate-stats">
+        <span class="mp-pass" id="g3-pass">0</span>
+        <span class="mp-fail" id="g3-fail">0</span>
+      </div>
+    </div>
+    <div class="mp-gate-row" data-gate="4">
+      <div class="mp-gate-num">4</div>
+      <div class="mp-gate-info">
+        <b>ML-DSA-44 crypto</b>
+        <span>FIPS 204 signature verify</span>
+      </div>
+      <div class="mp-gate-stats">
+        <span class="mp-pass" id="g4-pass">0</span>
+        <span class="mp-fail" id="g4-fail">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="mp-panel mp-block-panel">
+    <div class="mp-panel-head">
+      <h2>Block Timeline</h2>
+      <span class="mp-panel-sub">6-second slot · Aura rotation</span>
+    </div>
+    <div class="mp-block-countdown">
+      <div class="mp-block-ring">
+        <svg viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="45" class="ring-bg"/>
+          <circle cx="50" cy="50" r="45" class="ring-fg" id="block-ring"/>
+        </svg>
+        <div class="mp-block-seconds" id="block-seconds">6.0</div>
+      </div>
+      <div class="mp-block-info">
+        <div class="mp-block-label">Producing block</div>
+        <div class="mp-block-num" id="block-next">#1</div>
+        <div class="mp-block-tx-count" id="block-tx-count">0 transactions</div>
+      </div>
+    </div>
+    <div class="mp-recent-blocks" id="recent-blocks">
+      <!-- injected dynamically -->
+    </div>
+  </div>
+
+  <div class="mp-panel mp-utxo-panel">
+    <div class="mp-panel-head">
+      <h2>UTXO Pool</h2>
+      <span class="mp-panel-sub">live unspent outputs</span>
+    </div>
+    <div class="mp-utxo-list" id="utxo-list">
+      <!-- injected dynamically -->
+    </div>
+  </div>
+
+</section>
+
+<section class="mp-panel mp-stream-panel">
+  <div class="mp-panel-head">
+    <h2>Transaction Stream</h2>
+    <span class="mp-panel-sub">every new transaction, in order</span>
+    <div class="mp-stream-legend">
+      <span class="mp-legend-item"><span class="dot-pending"></span> pending</span>
+      <span class="mp-legend-item"><span class="dot-passed"></span> passed gates</span>
+      <span class="mp-legend-item"><span class="dot-included"></span> in block</span>
+      <span class="mp-legend-item"><span class="dot-rejected"></span> rejected</span>
+    </div>
+  </div>
+  <div class="mp-stream" id="tx-stream">
+    <!-- injected dynamically -->
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-col">
+      <div class="footer-brand">
+        <span class="brand-mark"></span>
+        CALIBRE <span class="brand-accent">PROTOCOL</span>
+      </div>
+      <p class="footer-tag">Post-quantum digital cash. Q-UTXO + on-chain ML-DSA-44.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Pages</h4>
+      <a href="/calibre-core/">Landing</a>
+      <a href="./mempool.html">Mempool</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core">GitHub</a>
+    </div>
+    <div class="footer-col">
+      <h4>About this page</h4>
+      <span class="footer-static">
+        Client-side simulation. No live chain data.
+        Real testnet: <code>calibre_testnet_1</code>
+      </span>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Calibre Protocol Contributors</span>
+    <span class="footer-disclaimer">Simulation. Not live data.</span>
+  </div>
+</footer>
+
+<script src="assets/mempool.js"></script>
+</body>
+</html>

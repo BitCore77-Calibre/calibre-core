@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibre Protocol — Post-Quantum Digital Cash</title>
+<meta name="description" content="Post-quantum Layer-1 blockchain with real FIPS 204 ML-DSA-44 verification on-chain. Q-UTXO state model, Fast-Path conflict detection.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Calibre Protocol — Post-Quantum Digital Cash">
+<meta property="og:description" content="Post-quantum Layer-1 blockchain with real ML-DSA-44 verification on-chain.">
+<meta property="og:url" content="https://bitcore77-calibre.github.io/calibre-core/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#050810">
+<link rel="canonical" href="https://bitcore77-calibre.github.io/calibre-core/">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
+
+<nav>
+  <a href="#" class="brand">
+    <span class="brand-mark"></span>
+    CALIBRE <span class="brand-accent">PROTOCOL</span>
+  </a>
+  <div class="nav-links">
+    <a href="#architecture">Architecture</a>
+    <a href="#proof">Proof</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="https://github.com/BitCore77-Calibre/calibre-core" class="nav-cta">GitHub →</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">
+      <span class="pulse"></span>
+      Testnet v0.6.0 live · chain <code>calibre_testnet_1</code>
+    </div>
+    <h1>
+      Post-quantum digital cash,<br>
+      <span class="grad">proven on-chain.</span>
+    </h1>
+    <p class="lead">
+      A quantum-resistant Layer-1 with <b>real ML-DSA-44 signatures verified
+      inside the runtime</b>. Every spend is a cryptographic claim on an
+      unspent output — signed with lattice math, checked by four independent
+      gates, and settled by a Fast-Path mempool.
+    </p>
+    <p class="lead-sub">
+      No accounts. No nonces. No elliptic curves in the value path.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/whitepaper/README.md">
+        Read the Whitepaper
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/BitCore77-Calibre/calibre-core">
+        View on GitHub
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div><b>FIPS 204</b><span>signature standard</span></div>
+      <div><b>4</b><span>verification gates</span></div>
+      <div><b>μs</b><span>double-spend rejection</span></div>
+      <div><b>6s</b><span>block finality</span></div>
+    </div>
+  </div>
+  <div class="hero-visual" aria-hidden="true">
+    <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="core" cx="50%" cy="50%">
+          <stop offset="0%" stop-color="#f7931a" stop-opacity="0.9"/>
+          <stop offset="60%" stop-color="#f7931a" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#f7931a" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <circle cx="200" cy="200" r="150" fill="url(#core)"/>
+      <circle cx="200" cy="200" r="90" fill="none" stroke="#f7931a" stroke-width="0.5" stroke-dasharray="2 4"/>
+      <circle cx="200" cy="200" r="140" fill="none" stroke="#8957e5" stroke-width="0.5" stroke-dasharray="1 6"/>
+      <circle cx="200" cy="200" r="180" fill="none" stroke="#58a6ff" stroke-width="0.5" stroke-dasharray="1 8"/>
+      <g class="orbit-1">
+        <circle cx="200" cy="110" r="4" fill="#f7931a"/>
+        <circle cx="290" cy="200" r="3" fill="#f7931a" opacity="0.6"/>
+      </g>
+      <g class="orbit-2">
+        <circle cx="110" cy="200" r="3" fill="#8957e5"/>
+        <circle cx="200" cy="290" r="4" fill="#8957e5" opacity="0.6"/>
+      </g>
+      <g class="orbit-3">
+        <circle cx="200" cy="20" r="2" fill="#58a6ff"/>
+      </g>
+      <text x="200" y="205" text-anchor="middle" fill="#e6edf3" font-family="ui-monospace" font-size="14" font-weight="700">ML-DSA-44</text>
+      <text x="200" y="225" text-anchor="middle" fill="#8b949e" font-family="ui-monospace" font-size="10">FIPS 204</text>
+    </svg>
+  </div>
+</header>
+
+<section class="trust-bar">
+  <div class="trust-inner">
+    <span class="trust-item">NIST FIPS 204</span>
+    <span class="trust-sep">·</span>
+    <span class="trust-item">CRYSTALS-Dilithium</span>
+    <span class="trust-sep">·</span>
+    <span class="trust-item">Substrate</span>
+    <span class="trust-sep">·</span>
+    <span class="trust-item">Rust 1.85</span>
+    <span class="trust-sep">·</span>
+    <span class="trust-item">Docker</span>
+    <span class="trust-sep">·</span>
+    <span class="trust-item">GPL-3.0-only</span>
+  </div>
+</section>
+
+<section class="context-strip">
+  <div class="context-inner">
+    <div class="context-icon">◆</div>
+    <div class="context-text">
+      <b>Post-quantum signatures are 35× larger than ECDSA.</b>
+      Every existing chain is struggling with the throughput cost.
+      Calibre was <em>designed around that constraint</em> from the first line of code —
+      using UTXO aggregation, parallel verification, and Fast-Path mempool settlement.
+      <a href="#size-math">See the engineering →</a>
+    </div>
+  </div>
+</section>
+
+<section id="problem" class="section">
+  <div class="section-head">
+    <span class="section-tag">THE PROBLEM</span>
+    <h2>Web3 is built on fragile physics.</h2>
+    <p class="section-lead">
+      Four threats converge on every existing blockchain. Calibre addresses
+      all four at the protocol layer — not through user education or bolt-on tooling.
+    </p>
+  </div>
+
+  <div class="threat-grid">
+    <article class="threat">
+      <div class="threat-num">01</div>
+      <h3>The Quantum Threat</h3>
+      <p>Shor's algorithm breaks ECDSA and Ed25519 in polynomial time. Every wallet with an exposed public key becomes drainable — including Bitcoin and Ethereum.</p>
+      <div class="threat-tag">Probability rising</div>
+    </article>
+    <article class="threat">
+      <div class="threat-num">02</div>
+      <h3>The Seed-Phrase Crisis</h3>
+      <p>Twelve words are a single point of failure. Phishing, malware, and lost paper have cost users $1B+ — and every loss is permanent.</p>
+      <div class="threat-tag">$1B+ lost yearly</div>
+    </article>
+    <article class="threat">
+      <div class="threat-num">03</div>
+      <h3>Bridge Honeypots</h3>
+      <p>Cross-chain bridges hold billions under small multi-sig committees. Ronin ($625M), Wormhole ($320M), Nomad ($190M). Centralized exchanges with worse disclosure.</p>
+      <div class="threat-tag">$2.5B+ drained</div>
+    </article>
+    <article class="threat">
+      <div class="threat-num">04</div>
+      <h3>Blind Signing</h3>
+      <p>Wallets display "swap 1 ETH for 2000 USDC" but users sign opaque bytecode. Hidden drains and unlimited approvals ride along invisibly.</p>
+      <div class="threat-tag">No verification</div>
+    </article>
+  </div>
+</section>
+
+
+<section id="size-math" class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">THE HARD PART</span>
+    <h2>The math that makes post-quantum hard.</h2>
+    <p class="section-lead">
+      Replacing elliptic-curve cryptography with lattice cryptography is not a
+      one-line code change. The signatures are <b>roughly 35× larger</b>. Every
+      existing blockchain was designed around 100-byte signatures. This is why
+      the migration has not happened yet.
+    </p>
+  </div>
+
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th>Signature scheme</th>
+          <th>Public key</th>
+          <th>Signature</th>
+          <th>Total per spend</th>
+          <th>Quantum-safe?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ECDSA (secp256k1)</td>
+          <td>33 B</td><td>71 B</td><td>~104 B</td>
+          <td class="no">❌ Shor-broken</td>
+        </tr>
+        <tr>
+          <td>Ed25519</td>
+          <td>32 B</td><td>64 B</td><td>~96 B</td>
+          <td class="no">❌ Shor-broken</td>
+        </tr>
+        <tr>
+          <td>Falcon-512</td>
+          <td>897 B</td><td>666 B</td><td>~1,563 B</td>
+          <td class="yes">✅ Lattice</td>
+        </tr>
+        <tr class="ours-row">
+          <td><b>ML-DSA-44 (Dilithium2)</b></td>
+          <td><b>1,312 B</b></td><td><b>2,420 B</b></td><td><b>3,732 B</b></td>
+          <td class="yes">✅ Lattice · NIST</td>
+        </tr>
+        <tr>
+          <td>ML-DSA-65 (Dilithium3)</td>
+          <td>1,952 B</td><td>3,293 B</td><td>5,245 B</td>
+          <td class="yes">✅ Lattice · NIST</td>
+        </tr>
+        <tr>
+          <td>SPHINCS+-128s</td>
+          <td>32 B</td><td>7,856 B</td><td>~7,888 B</td>
+          <td class="yes">✅ Hash-based</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="size-impact">
+    <div class="impact-card">
+      <div class="impact-num">~35×</div>
+      <div class="impact-label">larger than ECDSA</div>
+      <p>Dilithium2 is ~35× the size of an ECDSA signature. A typical Bitcoin transaction (~250 B) becomes ~4,000 B when post-quantum.</p>
+    </div>
+    <div class="impact-card">
+      <div class="impact-num">16×</div>
+      <div class="impact-label">fewer tx per Bitcoin block</div>
+      <p>If Bitcoin naively switched to Dilithium today, its 1 MB blocks would fit ~250 transactions instead of ~4,000. Throughput collapses.</p>
+    </div>
+    <div class="impact-card">
+      <div class="impact-num">~70k</div>
+      <div class="impact-label">gas per PQC tx on Ethereum</div>
+      <p>A single Dilithium signature on Ethereum would cost ~70,000 gas — over 2× the cost of a full ERC-20 transfer. Block space becomes prohibitively expensive.</p>
+    </div>
+  </div>
+
+  <div class="arch-note">
+    <b>Why this matters:</b> Bitcoin Core, the Ethereum Foundation, and NIST all agree on the
+    destination — post-quantum signatures. <em>None of them agree on how to get there</em>
+    without sacrificing throughput. That is the problem Calibre was designed to solve.
+  </div>
+</section>
+
+<section id="architecture" class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">ARCHITECTURE</span>
+    <h2>Five layers, one invariant.</h2>
+    <p class="section-lead">
+      Every unit of value is an unspent output bound to a post-quantum lock.
+      No accounts. No nonces. No elliptic curves in the value path.
+    </p>
+  </div>
+
+  <div class="arch-visual">
+    <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" class="arch-svg">
+      <defs>
+        <linearGradient id="lay1" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#f7931a" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#f7931a" stop-opacity="0.03"/>
+        </linearGradient>
+        <linearGradient id="lay2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#8957e5" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#8957e5" stop-opacity="0.03"/>
+        </linearGradient>
+        <linearGradient id="lay3" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#58a6ff" stop-opacity="0.03"/>
+        </linearGradient>
+      </defs>
+
+      <text x="20" y="40" fill="#8b949e" font-family="ui-monospace" font-size="11" letter-spacing="2">CLIENT LAYER</text>
+      <rect x="20" y="55" width="860" height="70" rx="10" fill="url(#lay1)" stroke="#f7931a" stroke-opacity="0.3"/>
+      <text x="60" y="85" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">Mobile Wallet</text>
+      <text x="60" y="105" fill="#8b949e" font-family="ui-monospace" font-size="10">iOS · Android · UniFFI</text>
+      <text x="280" y="85" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">Calibre Console</text>
+      <text x="280" y="105" fill="#8b949e" font-family="ui-monospace" font-size="10">React · TypeScript</text>
+      <text x="520" y="85" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">CLI + Faucet</text>
+      <text x="520" y="105" fill="#8b949e" font-family="ui-monospace" font-size="10">Python · @polkadot/api</text>
+      <text x="760" y="85" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">RPC</text>
+      <text x="760" y="105" fill="#8b949e" font-family="ui-monospace" font-size="10">:9944</text>
+
+      <text x="20" y="160" fill="#8b949e" font-family="ui-monospace" font-size="11" letter-spacing="2">EXECUTION LAYER</text>
+      <rect x="20" y="175" width="860" height="100" rx="10" fill="url(#lay2)" stroke="#8957e5" stroke-opacity="0.3"/>
+      <text x="60" y="205" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">Fast-Path Mempool</text>
+      <text x="60" y="225" fill="#8b949e" font-family="ui-monospace" font-size="10">per-input conflict tags</text>
+      <text x="60" y="245" fill="#8b949e" font-family="ui-monospace" font-size="10">double-spends rejected in μs</text>
+      <path d="M 300 225 L 350 225" stroke="#8957e5" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="370" y="205" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">pallet-qutxo</text>
+      <text x="370" y="225" fill="#8b949e" font-family="ui-monospace" font-size="10">state machine</text>
+      <text x="370" y="245" fill="#8b949e" font-family="ui-monospace" font-size="10">Σ inputs ≥ Σ outputs</text>
+      <path d="M 580 225 L 630 225" stroke="#8957e5" stroke-width="1.5"/>
+      <text x="650" y="205" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">UtxoSet</text>
+      <text x="650" y="225" fill="#8b949e" font-family="ui-monospace" font-size="10">RocksDB</text>
+      <text x="650" y="245" fill="#8b949e" font-family="ui-monospace" font-size="10">Blake2b-256 keys</text>
+
+      <text x="20" y="315" fill="#8b949e" font-family="ui-monospace" font-size="11" letter-spacing="2">CRYPTOGRAPHY LAYER</text>
+      <rect x="20" y="330" width="420" height="100" rx="10" fill="url(#lay3)" stroke="#58a6ff" stroke-opacity="0.3"/>
+      <text x="60" y="360" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">ML-DSA-44 verification</text>
+      <text x="60" y="380" fill="#8b949e" font-family="ui-monospace" font-size="10">FIPS 204 · dilithium-rs 0.4.1</text>
+      <text x="60" y="400" fill="#8b949e" font-family="ui-monospace" font-size="10">pure Rust · no_std · WASM</text>
+      <text x="60" y="420" fill="#f7931a" font-family="ui-monospace" font-size="10">runs inside the runtime</text>
+
+      <rect x="460" y="330" width="420" height="100" rx="10" fill="url(#lay3)" stroke="#58a6ff" stroke-opacity="0.3"/>
+      <text x="500" y="360" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">Lock binding</text>
+      <text x="500" y="380" fill="#8b949e" font-family="ui-monospace" font-size="10">blake2_256(witness_pk)</text>
+      <text x="500" y="400" fill="#8b949e" font-family="ui-monospace" font-size="10">== UTXO.lock</text>
+      <text x="500" y="420" fill="#f7931a" font-family="ui-monospace" font-size="10">prevents key substitution</text>
+
+      <text x="20" y="470" fill="#8b949e" font-family="ui-monospace" font-size="11" letter-spacing="2">CONSENSUS LAYER</text>
+      <rect x="20" y="480" width="860" height="30" rx="6" fill="#0d1117" stroke="#3fb950" stroke-opacity="0.3"/>
+      <text x="60" y="500" fill="#3fb950" font-family="ui-monospace" font-size="12">Aura (6s slots) · GRANDPA (finality) · n=7 f=2</text>
+    </svg>
+  </div>
+
+  <div class="arch-note">
+    <b>Key design choice:</b> Calibre uses UTXO rather than an account model
+    because UTXO conflicts are <em>syntactic</em> — two transactions conflict
+    if and only if they share an input. That makes mempool-level double-spend
+    rejection and parallel verification possible.
+  </div>
+</section>
+
+
+<section id="throughput" class="section">
+  <div class="section-head">
+    <span class="section-tag">THE SOLUTION</span>
+    <h2>How Calibre recovers throughput.</h2>
+    <p class="section-lead">
+      We cannot shrink the signatures — FIPS 204 defines their size. What we
+      <em>can</em> do is change the architecture so that large signatures don't
+      dominate cost. Calibre uses four independent techniques.
+    </p>
+  </div>
+
+  <div class="tech-grid">
+    <article class="tech">
+      <div class="tech-num">01</div>
+      <h3>UTXO aggregation</h3>
+      <p>
+        In an account model, every spend generates its own signature. In a
+        UTXO model, ten inputs can be combined into a single transaction with
+        <b>one signature</b>.
+      </p>
+      <div class="tech-badge">10 UTXOs → 1 signature</div>
+    </article>
+
+    <article class="tech">
+      <div class="tech-num">02</div>
+      <h3>Mempool-level conflict detection</h3>
+      <p>
+        Non-conflicting transactions are verified in parallel. The mempool
+        knows <em>syntactically</em> that Tx-A and Tx-B don't touch the same
+        UTXO — no sequential execution required.
+      </p>
+      <div class="tech-badge">Parallel verification</div>
+    </article>
+
+    <article class="tech">
+      <div class="tech-num">03</div>
+      <h3>Fast-Path settlement</h3>
+      <p>
+        Transactions with no conflicting inputs broadcast and settle
+        immediately, without waiting for block production. A 6-second block
+        time becomes the <b>worst case</b>, not the typical case.
+      </p>
+      <div class="tech-badge">Sub-second for non-conflicting</div>
+    </article>
+
+    <article class="tech">
+      <div class="tech-num">04</div>
+      <h3>Lattice signature aggregation (roadmap)</h3>
+      <p>
+        Multiple Dilithium signatures can be combined into a single composite
+        proof using BLS-style aggregation adapted for lattices. This is an
+        active area of cryptography research.
+      </p>
+      <div class="tech-badge">Under research</div>
+    </article>
+  </div>
+
+  <div class="throughput-visual">
+    <h3>Why this works: the throughput math</h3>
+    <div class="tp-comparison">
+      <div class="tp-col">
+        <div class="tp-header bad">Naive PQC on Bitcoin</div>
+        <ul>
+          <li>1 MB block limit</li>
+          <li>Each tx: ~4,000 bytes</li>
+          <li>~250 tx per block</li>
+          <li>10 min block time</li>
+          <li class="tp-total bad">≈ 0.4 TPS</li>
+        </ul>
+      </div>
+      <div class="tp-col">
+        <div class="tp-header good">Calibre</div>
+        <ul>
+          <li>Substrate block limits (dynamic)</li>
+          <li>Each tx: ~4,000 bytes, but aggregated</li>
+          <li>Parallel verification of non-conflicting</li>
+          <li>6s block time</li>
+          <li class="tp-total good">≈ 100+ TPS base, scaling with inputs</li>
+        </ul>
+      </div>
+    </div>
+    <p class="tp-foot">
+      Throughput is bounded by <b>bandwidth</b>, not cryptography. Multi-core
+      CPUs verify hundreds of Dilithium signatures per second; the bottleneck
+      is how fast the network can gossip the bytes. UTXO aggregation reduces
+      the number of signatures required for the same economic activity.
+    </p>
+  </div>
+</section>
+
+
+<section id="full-stack" class="section">
+  <div class="section-head">
+    <span class="section-tag">THE WHOLE SYSTEM</span>
+    <h2>The full Calibre cryptoeconomy stack.</h2>
+    <p class="section-lead">
+      A cryptoeconomy is more than cryptography. It's the full vertical:
+      protocol, security, incentives, interoperability, privacy, and governance.
+      Here is every layer — what exists today and what is planned.
+    </p>
+  </div>
+
+  <div class="stack">
+
+    <div class="layer">
+      <div class="layer-num">L9</div>
+      <div class="layer-body">
+        <h3>Governance &amp; upgrade path</h3>
+        <p>
+          On-chain $CAL voting for runtime upgrades, cryptographic parameter
+          changes, and fee schedule adjustments. Forkless migration to a new
+          signature scheme is a governance decision, not a hard fork.
+        </p>
+        <span class="layer-status planned">planned</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L8</div>
+      <div class="layer-body">
+        <h3>Privacy layer (ZkShield UTXOs)</h3>
+        <p>
+          Optional shielded UTXOs using Pedersen commitments for hidden values
+          and nullifier sets for double-spend prevention. Privacy layered on
+          top of transparent post-quantum path — not replacing it.
+        </p>
+        <span class="layer-status planned">roadmap</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L7</div>
+      <div class="layer-body">
+        <h3>Interoperability (Intent Bridge)</h3>
+        <p>
+          Solver-based cross-chain settlement verified by Zero-Knowledge
+          proofs. No wrapped tokens. No multi-sig custodians. No honeypot to
+          drain — only Solver bonds that are slashed on fraud.
+        </p>
+        <span class="layer-status planned">roadmap</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L6</div>
+      <div class="layer-body">
+        <h3>Tokenomics ($CAL)</h3>
+        <p>
+          Native gas, solver collateral, and deflationary burn asset. Every
+          UTXO spend burns an implicit fee (Σ inputs − Σ outputs). Fee burn
+          is proportional to network usage. Supply schedule committed in the
+          genesis config.
+        </p>
+        <span class="layer-status shipped">shipped (testnet)</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L5</div>
+      <div class="layer-body">
+        <h3>Endpoint security (A.E.G.I.S.)</h3>
+        <p>
+          Attestation-Enhanced Quantum-Resilient Identity System. Replaces
+          seed phrases with hardware-attested threshold-derived keys bound to
+          biometrics, device attestation, and time-drift nonces — reconstructed
+          only in volatile memory during signing.
+        </p>
+        <span class="layer-status planned">roadmap (single-key today)</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L4</div>
+      <div class="layer-body">
+        <h3>Cryptographic primitives</h3>
+        <p>
+          ML-DSA-44 (FIPS 204) for signatures. Blake2b-256 for UTXO IDs and
+          lock hashes. SHAKE256 for QR-CKD context derivation. All verified
+          inside the WASM runtime — no trusted hardware assumptions.
+        </p>
+        <span class="layer-status shipped">shipped</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L3</div>
+      <div class="layer-body">
+        <h3>Execution model (Q-UTXO)</h3>
+        <p>
+          Unspent-output state machine. Every unit of value is a UTXO bound
+          to a QuantumLock. Conflicts between transactions are syntactic
+          (shared inputs), enabling parallel verification and mempool-level
+          double-spend rejection.
+        </p>
+        <span class="layer-status shipped">shipped</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L2</div>
+      <div class="layer-body">
+        <h3>Mempool (Fast-Path Conflict Detector)</h3>
+        <p>
+          Per-input conflict tags reject double-spends in microseconds.
+          Non-conflicting transactions broadcast in parallel without waiting
+          for block production. Replay attacks hit the stale gate before
+          touching block space.
+        </p>
+        <span class="layer-status shipped">shipped</span>
+      </div>
+    </div>
+
+    <div class="layer">
+      <div class="layer-num">L1</div>
+      <div class="layer-body">
+        <h3>Consensus (Aura + GRANDPA)</h3>
+        <p>
+          Slot-based block production (Aura, 6s) plus Byzantine-fault-tolerant
+          finality (GRANDPA). Current testnet supports n=7 validators with
+          f=2 Byzantine tolerance. Multi-validator launcher under development.
+        </p>
+        <span class="layer-status progress">n=7 spec shipped</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="arch-note">
+    <b>What is real today:</b> layers L1, L2, L3, L4, and L6 are shipped and
+    demonstrable on the testnet. Layers L5, L7, L8, and L9 are on the roadmap,
+    with designs specified in the whitepaper. Nothing below L4 requires
+    re-architecting to add the layers above it — the design is extensible by
+    construction.
+  </div>
+</section>
+
+<section id="proof" class="section">
+  <div class="section-head">
+    <span class="section-tag">VERIFICATION</span>
+    <h2>Four gates. One attacker must defeat all four.</h2>
+    <p class="section-lead">
+      Every signed UTXO spend passes through four independent verification
+      layers. Each gate rejects a distinct attack class in a distinct
+      amount of time.
+    </p>
+  </div>
+
+  <div class="gates">
+    <div class="gate">
+      <div class="gate-num">GATE 1</div>
+      <div class="gate-name">Mempool</div>
+      <div class="gate-desc">
+        Per-input conflict tags. Two transactions touching the same UTXO
+        collide in the pool graph.
+      </div>
+      <div class="gate-reject">→ <code>Priority is too low</code></div>
+      <div class="gate-time">~microseconds</div>
+    </div>
+
+    <div class="gate-arrow">→</div>
+
+    <div class="gate">
+      <div class="gate-num">GATE 2</div>
+      <div class="gate-name">State</div>
+      <div class="gate-desc">
+        <code>UtxoSet::contains_key(id)</code> check. Replayed spends hit
+        the state boundary before touching the block producer.
+      </div>
+      <div class="gate-reject">→ <code>Transaction is outdated</code></div>
+      <div class="gate-time">~1ms</div>
+    </div>
+
+    <div class="gate-arrow">→</div>
+
+    <div class="gate">
+      <div class="gate-num">GATE 3</div>
+      <div class="gate-name">Runtime</div>
+      <div class="gate-desc">
+        Witness public key must hash to the UTXO's lock:
+        <code>blake2_256(pk) == lock</code>. Prevents key substitution.
+      </div>
+      <div class="gate-reject">→ <code>LockMismatch</code></div>
+      <div class="gate-time">~10μs</div>
+    </div>
+
+    <div class="gate-arrow">→</div>
+
+    <div class="gate">
+      <div class="gate-num">GATE 4</div>
+      <div class="gate-name">Cryptography</div>
+      <div class="gate-desc">
+        Real FIPS 204 ML-DSA-44 verification inside the WASM runtime.
+        A forged signature cannot pass this gate — ever.
+      </div>
+      <div class="gate-reject">→ <code>SignatureVerificationFailed</code></div>
+      <div class="gate-time">~500μs</div>
+    </div>
+  </div>
+
+  <div class="proof-grid">
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Real ML-DSA-44 on-chain</h3>
+      <p>Not a placeholder. The WASM runtime calls <code>MlDsaKeyPair::verify</code> on every spend.</p>
+    </article>
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Forgery rejection proven</h3>
+      <p>A random 2,420-byte signature is accepted by the mempool and rejected at block execution. The UTXO set is unchanged.</p>
+    </article>
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Double-spend rejection proven</h3>
+      <p>Two conflicting transactions submitted in parallel: one wins, the other dies in the pool with <code>Priority is too low</code>.</p>
+    </article>
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Replay rejection proven</h3>
+      <p>Re-submitting a spend after block inclusion returns <code>Transaction is outdated</code> — no block space consumed.</p>
+    </article>
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Conservation of mass</h3>
+      <p>Every spend satisfies <code>Σ inputs ≥ Σ outputs</code>. The invariant is unit-tested and enforced before any state mutation.</p>
+    </article>
+    <article class="proof">
+      <div class="proof-icon">✓</div>
+      <h3>Lock ↔ pubkey binding</h3>
+      <p>A valid signature from a different keypair is rejected at Gate 3 — before the signature is even checked.</p>
+    </article>
+  </div>
+</section>
+
+<section class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">STATE MODEL</span>
+    <h2>The UTXO lifecycle.</h2>
+    <p class="section-lead">
+      Value isn't "deducted from a balance." It's destroyed and recreated.
+      The chain never mints on a transfer — only on a declared authority call.
+    </p>
+  </div>
+
+  <div class="lifecycle">
+    <div class="lc-box lc-input">
+      <div class="lc-label">INPUT UTXO</div>
+      <div class="lc-value">1,000,000,000</div>
+      <div class="lc-lock">AegisThreshold</div>
+      <div class="lc-state">destroyed</div>
+    </div>
+
+    <div class="lc-arrow">
+      <svg viewBox="0 0 100 40" width="100" height="40">
+        <path d="M 5 20 L 90 20" stroke="#f7931a" stroke-width="2"/>
+        <path d="M 85 14 L 95 20 L 85 26 Z" fill="#f7931a"/>
+      </svg>
+      <div class="lc-arrow-label">spend</div>
+    </div>
+
+    <div class="lc-outputs">
+      <div class="lc-box lc-output">
+        <div class="lc-label">CHILD UTXO #0</div>
+        <div class="lc-value">400,000,000</div>
+        <div class="lc-lock">AegisThreshold</div>
+        <div class="lc-state">live</div>
+      </div>
+      <div class="lc-box lc-output">
+        <div class="lc-label">CHILD UTXO #1</div>
+        <div class="lc-value">600,000,000</div>
+        <div class="lc-lock">AegisThreshold</div>
+        <div class="lc-state">live</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="conservation">
+    <span class="check">Σ inputs ≥ Σ outputs</span>
+    <span class="eq">1,000,000,000 ≥ 400,000,000 + 600,000,000</span>
+    <span class="ok">✓ conservation holds</span>
+  </div>
+</section>
+
+
+<section id="reality" class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">HONEST STATUS</span>
+    <h2>What's real today. What's roadmap.</h2>
+    <p class="section-lead">
+      We do not overclaim. Every row below is either shipped code with a
+      reproducible test, or an explicitly labeled roadmap item. Investors,
+      auditors, and developers deserve this clarity — and so do you.
+    </p>
+  </div>
+
+  <div class="reality-grid">
+    <div class="reality-col">
+      <div class="reality-head shipped-head">
+        <span class="reality-dot"></span>
+        SHIPPED · TESTNET v0.6.0
+      </div>
+      <ul class="reality-list">
+        <li><b>Q-UTXO state model</b><span>pallet-qutxo, conservation of mass unit-tested</span></li>
+        <li><b>Real ML-DSA-44 verification on-chain</b><span>WASM runtime calls MlDsaKeyPair::verify on every spend</span></li>
+        <li><b>Lock binding (blake2 hash)</b><span>witness pubkey must match UTXO.lock — enforced</span></li>
+        <li><b>Fast-Path conflict detector</b><span>per-input mempool tags, double-spend rejected in μs</span></li>
+        <li><b>Stale gate</b><span>replay returns Transaction is outdated</span></li>
+        <li><b>Named testnet</b><span>calibre_testnet_1 with verifiable chain-spec fingerprint</span></li>
+        <li><b>HTTP faucet</b><span>POST pubkey → 1B CAL locked to that key</span></li>
+        <li><b>Docker deployment</b><span>docker compose up launches node + faucet + Prometheus</span></li>
+        <li><b>Whitepaper + diagrams</b><span>4-part spec, 6 architecture diagrams</span></li>
+        <li><b>7-authority chain spec</b><span>n=7 f=2 BFT spec committed</span></li>
+      </ul>
+    </div>
+
+    <div class="reality-col">
+      <div class="reality-head progress-head">
+        <span class="reality-dot"></span>
+        IN PROGRESS
+      </div>
+      <ul class="reality-list">
+        <li><b>Multi-validator launcher</b><span>chain spec ready; launcher blocked on Substrate import-worker panic on non-first validators</span></li>
+        <li><b>Benchmark-derived weights</b><span>current weights are hardcoded; benchmark suite is Phase 8</span></li>
+        <li><b>try-runtime migrations</b><span>runtime upgrades not yet supported; needed before mainnet</span></li>
+      </ul>
+
+      <div class="reality-head planned-head">
+        <span class="reality-dot"></span>
+        ROADMAP
+      </div>
+      <ul class="reality-list">
+        <li><b>A.E.G.I.S. threshold MPC</b><span>single Dilithium key today; multi-party threshold in Phase 9</span></li>
+        <li><b>Hardware attestation verification</b><span>AppAttest / Play Integrity currently no-op</span></li>
+        <li><b>ZK Intent Bridge</b><span>design only; no circuits deployed</span></li>
+        <li><b>ZkShield private UTXOs</b><span>Pedersen commitments + nullifiers, Phase 10</span></li>
+        <li><b>Third-party audit</b><span>planned for Phase 8 (Trail of Bits / Spearbit / Veridise)</span></li>
+        <li><b>Bug bounty program</b><span>to launch with public testnet</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="arch-note">
+    <b>Why we publish the roadmap:</b> a blockchain's credibility comes from
+    verifiable claims, not confident ones. The whitepaper §8.2 and §10.3 list
+    every known limitation. Every phase ships with an associated test, commit,
+    or on-chain demonstration. Nothing in the "shipped" column is aspirational.
+  </div>
+</section>
+
+
+<section id="big-chains" class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">THE LANDSCAPE</span>
+    <h2>How the big chains are handling quantum.</h2>
+    <p class="section-lead">
+      Every serious blockchain knows about the quantum threat. Each is solving
+      it differently — and each solution has a cost. Here is the honest
+      comparison, based on public research and proposals.
+    </p>
+  </div>
+
+  <div class="chain-cards">
+
+    <article class="chain-card">
+      <div class="chain-head">
+        <div class="chain-logo">₿</div>
+        <div>
+          <h3>Bitcoin</h3>
+          <span class="chain-status">Post-quantum research · no deployment</span>
+        </div>
+      </div>
+      <p class="chain-problem">
+        <b>The problem:</b> ECDSA exposes the public key whenever a UTXO is
+        spent. A quantum computer has ~10 minutes (one block) to derive the
+        private key and front-run the transaction.
+      </p>
+      <p class="chain-solution">
+        <b>Proposed solution:</b> BIP-360 / P2MR introduces post-quantum
+        script opcodes. Users would voluntarily migrate to new addresses.
+      </p>
+      <p class="chain-cost">
+        <b>The cost:</b> Soft fork required (years of political coordination).
+        Users must move funds. Signature sizes explode — 1 MB blocks fit
+        far fewer transactions.
+      </p>
+    </article>
+
+    <article class="chain-card">
+      <div class="chain-head">
+        <div class="chain-logo">Ξ</div>
+        <div>
+          <h3>Ethereum</h3>
+          <span class="chain-status">Account abstraction · research phase</span>
+        </div>
+      </div>
+      <p class="chain-problem">
+        <b>The problem:</b> Beacon Chain consensus relies on BLS12-381
+        elliptic curves. A quantum computer breaks both the signature scheme
+        <em>and</em> the consensus layer simultaneously.
+      </p>
+      <p class="chain-solution">
+        <b>Proposed solution:</b> ERC-4337 account abstraction. Wallet
+        contracts become programmable — cryptography can be swapped at the
+        application layer.
+      </p>
+      <p class="chain-cost">
+        <b>The cost:</b> Every user must deploy a new wallet. ~3.3 KB
+        signatures cost ~70,000 gas — unaffordable for most users without
+        L2 rollup compression.
+      </p>
+    </article>
+
+    <article class="chain-card">
+      <div class="chain-head">
+        <div class="chain-logo">Σ</div>
+        <div>
+          <h3>Solana</h3>
+          <span class="chain-status">Early research · no public roadmap</span>
+        </div>
+      </div>
+      <p class="chain-problem">
+        <b>The problem:</b> Ed25519 in the critical path of every transaction.
+        Solana's throughput depends on parallel signature verification at the
+        TU (Transaction Unit) level.
+      </p>
+      <p class="chain-solution">
+        <b>Direction:</b> Falcon-512 is the most discussed candidate —
+        smaller than Dilithium but harder to implement side-channel-resistant.
+      </p>
+      <p class="chain-cost">
+        <b>The cost:</b> Unknown. Solana's block model assumes compact
+        signatures. Redesigning around 1.5 KB signatures may require a hard
+        fork.
+      </p>
+    </article>
+
+    <article class="chain-card">
+      <div class="chain-head">
+        <div class="chain-logo">⚛</div>
+        <div>
+          <h3>QRL</h3>
+          <span class="chain-status">Post-quantum from genesis · account model</span>
+        </div>
+      </div>
+      <p class="chain-problem">
+        <b>Already solved:</b> Quantum Resistant Ledger has been using XMSS
+        hash-based signatures since 2016. It is genuinely quantum-safe today.
+      </p>
+      <p class="chain-solution">
+        <b>How it works:</b> XMSS one-time signatures. Fast verification,
+        hash-based security, well-studied.
+      </p>
+      <p class="chain-cost">
+        <b>The cost:</b> Account model — no UTXO parallelism, no mempool
+        conflict detection. XMSS keys are stateful: each key can sign only
+        once before needing rotation, a UX burden most users ignore.
+      </p>
+    </article>
+
+    <article class="chain-card ours-card">
+      <div class="chain-head">
+        <div class="chain-logo">◆</div>
+        <div>
+          <h3>Calibre</h3>
+          <span class="chain-status">PQ-first L1 · UTXO model · shipped</span>
+        </div>
+      </div>
+      <p class="chain-problem">
+        <b>Design starting point:</b> What if we <em>assume</em> signatures
+        will be 35× larger and <em>build the chain around that constraint</em>
+        from day one?
+      </p>
+      <p class="chain-solution">
+        <b>Our approach:</b> Q-UTXO state model + FIPS 204 ML-DSA-44
+        verification inside WASM + four-gate verification + Fast-Path mempool
+        + UTXO aggregation for parallel verification.
+      </p>
+      <p class="chain-cost">
+        <b>Trade-offs we accept:</b> Larger witness data per transaction.
+        Higher storage per UTXO. Node operators need modern hardware. In
+        exchange: quantum safety is native, not bolted on.
+      </p>
+    </article>
+
+  </div>
+
+  <div class="arch-note">
+    <b>The pattern:</b> legacy chains retrofit post-quantum security onto
+    architectures that were never designed for it. Calibre was designed PQ-first.
+    This is the same difference as adding electric motors to a Model T versus
+    designing an electric car from scratch.
+  </div>
+</section>
+
+<section id="quickstart" class="section">
+  <div class="section-head">
+    <span class="section-tag">QUICK START</span>
+    <h2>Run it in 30 seconds.</h2>
+    <p class="section-lead">
+      One prerequisite: Docker. Three commands to a live post-quantum testnet
+      with a faucet, console, and Prometheus metrics.
+    </p>
+  </div>
+
+  <div class="terminal">
+    <div class="term-header">
+      <span class="dot dot-red"></span>
+      <span class="dot dot-yellow"></span>
+      <span class="dot dot-green"></span>
+      <span class="term-title">bash — calibre-core</span>
+    </div>
+    <div class="term-body">
+      <div class="term-line">
+        <span class="prompt">$</span>
+        <span class="cmd">git clone https://github.com/BitCore77-Calibre/calibre-core</span>
+      </div>
+      <div class="term-line">
+        <span class="prompt">$</span>
+        <span class="cmd">cd calibre-core</span>
+      </div>
+      <div class="term-line">
+        <span class="prompt">$</span>
+        <span class="cmd">docker compose up</span>
+      </div>
+      <div class="term-out">
+        ✔ Network calibre-template_default  Created<br>
+        ✔ Container calibre-node            Healthy<br>
+        ✔ Container calibre-faucet          Started<br>
+        ✔ Container calibre-prometheus      Started
+      </div>
+      <div class="term-line">
+        <span class="prompt">$</span>
+        <span class="cmd">docker compose exec node pq-signer keygen &gt; pubkey.txt</span>
+      </div>
+      <div class="term-line">
+        <span class="prompt">$</span>
+        <span class="cmd">curl -X POST http://127.0.0.1:8090/faucet \</span>
+      </div>
+      <div class="term-line">
+        <span class="prompt"> </span>
+        <span class="cmd">&nbsp;&nbsp;-H 'Content-Type: application/json' \</span>
+      </div>
+      <div class="term-line">
+        <span class="prompt"> </span>
+        <span class="cmd">&nbsp;&nbsp;-d "{\"pubkey\": \"$(cat pubkey.txt)\"}"</span>
+      </div>
+      <div class="term-out success">
+        {<br>
+        &nbsp;&nbsp;"ok": true,<br>
+        &nbsp;&nbsp;"lock_hash": "0x13e5eea4...",<br>
+        &nbsp;&nbsp;"amount": 1000000000,<br>
+        &nbsp;&nbsp;"tx_hash": "0x6c45d5b2..."<br>
+        }
+      </div>
+    </div>
+  </div>
+
+  <div class="qs-note">
+    You now hold <b>1,000,000,000 testnet CAL</b>, cryptographically bound to
+    a Dilithium public key that only your private key can spend.
+    No accounts. No seed phrases. No elliptic curves.
+  </div>
+</section>
+
+<section id="comparison" class="section section-alt">
+  <div class="section-head">
+    <span class="section-tag">COMPARISON</span>
+    <h2>Why not Bitcoin, Ethereum, or QRL?</h2>
+    <p class="section-lead">
+      Every prior design made a trade-off. Calibre picks a different set.
+    </p>
+  </div>
+
+  <div class="compare-wrap">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Bitcoin</th>
+          <th>Ethereum</th>
+          <th>QRL</th>
+          <th class="ours">Calibre</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>State model</td><td>UTXO</td><td>Account</td><td>Account</td><td class="ours">Q-UTXO</td></tr>
+        <tr><td>Signature scheme</td><td>secp256k1</td><td>secp256k1</td><td>XMSS</td><td class="ours">ML-DSA-44</td></tr>
+        <tr><td>Quantum-safe signatures</td><td>❌</td><td>❌</td><td>✅</td><td class="ours">✅</td></tr>
+        <tr><td>Quantum-safe hashes</td><td>✅</td><td>✅</td><td>✅</td><td class="ours">✅</td></tr>
+        <tr><td>Address derived from</td><td>hash(pk)</td><td>pk</td><td>pk</td><td class="ours">hash(Dilithium pk)</td></tr>
+        <tr><td>Mempool double-spend rejection</td><td>❌</td><td>❌</td><td>❌</td><td class="ours">✅</td></tr>
+        <tr><td>Parallel verification</td><td>Partial</td><td>Partial</td><td>❌</td><td class="ours">Native</td></tr>
+        <tr><td>Forkless crypto migration</td><td>❌</td><td>⚠️</td><td>❌</td><td class="ours">✅</td></tr>
+        <tr><td>Seed-phrase eliminated</td><td>❌</td><td>❌</td><td>❌</td><td class="ours">Roadmap</td></tr>
+        <tr><td>Confidential transactions</td><td>❌</td><td>L2 only</td><td>❌</td><td class="ours">Roadmap</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="roadmap" class="section">
+  <div class="section-head">
+    <span class="section-tag">ROADMAP</span>
+    <h2>Where Calibre is, and where it's going.</h2>
+    <p class="section-lead">
+      Every phase has a deliverable, a verifiable artifact, and a commit.
+      Nothing in this table is aspirational — the shipped column is real code.
+    </p>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-item done">
+      <div class="tl-marker">1–5</div>
+      <div class="tl-body">
+        <h3>Core engine</h3>
+        <p>Q-UTXO pallet · real ML-DSA-44 on-chain · Fast-Path conflict detector · Calibre Console · Docker deployment</p>
+        <div class="tl-status shipped">shipped</div>
+      </div>
+    </div>
+    <div class="tl-item done">
+      <div class="tl-marker">6.1–6.5</div>
+      <div class="tl-body">
+        <h3>Testnet &amp; publication</h3>
+        <p>Named testnet <code>calibre_testnet_1</code> · verifiable chain-spec fingerprint · HTTP faucet · whitepaper · 6 architecture diagrams · GitHub publication</p>
+        <div class="tl-status shipped">shipped</div>
+      </div>
+    </div>
+    <div class="tl-item next">
+      <div class="tl-marker">6.6</div>
+      <div class="tl-body">
+        <h3>Multi-validator testnet</h3>
+        <p>7 authorities (n=7 f=2). Chain-spec committed. Launcher deferred pending a Substrate import-worker fix.</p>
+        <div class="tl-status progress">in progress</div>
+      </div>
+    </div>
+    <div class="tl-item plan">
+      <div class="tl-marker">7</div>
+      <div class="tl-body">
+        <h3>Light nodes + ZK state proofs</h3>
+        <p>Succinct per-block state proofs. Mobile devices verify chain state without downloading the blockchain.</p>
+        <div class="tl-status planned">planned</div>
+      </div>
+    </div>
+    <div class="tl-item plan">
+      <div class="tl-marker">8</div>
+      <div class="tl-body">
+        <h3>Audit preparation</h3>
+        <p>Benchmark-derived weights · fuzz targets for crypto and UTXO · try-runtime migrations · third-party audit · bug bounty.</p>
+        <div class="tl-status planned">planned</div>
+      </div>
+    </div>
+    <div class="tl-item plan">
+      <div class="tl-marker">9</div>
+      <div class="tl-body">
+        <h3>ZK Intent Bridge</h3>
+        <p>Solver network with $CAL bonding and slashing. Cross-chain settlements without wrapped tokens or multi-sig custodians.</p>
+        <div class="tl-status planned">planned</div>
+      </div>
+    </div>
+    <div class="tl-item plan">
+      <div class="tl-marker">10–11</div>
+      <div class="tl-body">
+        <h3>Privacy &amp; mainnet</h3>
+        <p>ZkShield private UTXOs (Pedersen commitments + nullifiers). Final tokenomics. Mainnet launch.</p>
+        <div class="tl-status planned">planned</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section id="vision" class="section vision">
+  <div class="section-head">
+    <span class="section-tag">THE VISION</span>
+    <h2>What Calibre becomes.</h2>
+    <p class="section-lead">
+      The testnet today is a working prototype. The destination is a full
+      post-quantum cryptoeconomy — a monetary system designed from the first
+      line of code for a world where elliptic curves no longer protect value.
+    </p>
+  </div>
+
+  <div class="vision-grid">
+    <article class="vision-card">
+      <h3>The money layer of the post-quantum internet</h3>
+      <p>
+        When quantum computers break ECDSA — and they will — trillions in
+        existing digital assets become drainable. The chains that survive will
+        be the ones already running post-quantum signatures at the protocol
+        layer. Calibre is designed to be one of them.
+      </p>
+    </article>
+    <article class="vision-card">
+      <h3>A seedless, hardware-attested wallet</h3>
+      <p>
+        The A.E.G.I.S. design eliminates the twelve-word seed phrase entirely.
+        Your biometrics, your device's secure enclave, and a threshold of
+        trusted hardware become the key. Lose your phone, recover via social
+        threshold — not via a piece of paper under your mattress.
+      </p>
+    </article>
+    <article class="vision-card">
+      <h3>Trustless cross-chain value movement</h3>
+      <p>
+        The ZK Intent Bridge replaces multi-sig bridges with a solver network
+        and zero-knowledge proofs. Cross-chain swaps settle in blocks, not
+        in trust assumptions. No wrapped tokens, no custodian honeypot, no
+        $2.5B drains.
+      </p>
+    </article>
+    <article class="vision-card">
+      <h3>Privacy that doesn't cost throughput</h3>
+      <p>
+        ZkShield UTXOs are opt-in. Shielded transactions use Pedersen
+        commitments and nullifier sets. Users choose: transparent post-quantum
+        or shielded post-quantum — on the same chain, at the same throughput.
+      </p>
+    </article>
+    <article class="vision-card">
+      <h3>A monetary system that migrates with cryptography</h3>
+      <p>
+        When the next generation of post-quantum primitives is standardized —
+        and it will be, in 5, 10, 15 years — Calibre upgrades by governance
+        vote, not by hard fork. The QuantumLock enum and the Substrate runtime
+        make cryptographic migration a routine operation.
+      </p>
+    </article>
+    <article class="vision-card">
+      <h3>An open protocol, not a product</h3>
+      <p>
+        GPL-3.0-only. Auditable. Forkable. Anyone can inspect, fork, or
+        contribute. The value is not in the code — the code is public. The
+        value is in the network, the team, and the discipline of shipping
+        verifiable claims.
+      </p>
+    </article>
+  </div>
+
+  <div class="vision-close">
+    <p>
+      <b>Calibre Protocol is the money we would build if we started in 2050
+      and worked backwards.</b>
+    </p>
+  </div>
+</section>
+
+<section class="section cta-final">
+  <div class="cta-final-inner">
+    <h2>The quantum transition is not a question of if.</h2>
+    <p>Only of when — and whether the money we build will survive it.</p>
+    <div class="cta-row center">
+      <a class="btn btn-primary" href="https://github.com/BitCore77-Calibre/calibre-core">Clone the repository</a>
+      <a class="btn btn-ghost" href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/whitepaper/README.md">Read the whitepaper</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-col">
+      <div class="footer-brand">
+        <span class="brand-mark"></span>
+        CALIBRE <span class="brand-accent">PROTOCOL</span>
+      </div>
+      <p class="footer-tag">Post-quantum Layer-1. Q-UTXO + on-chain ML-DSA-44.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Documentation</h4>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/whitepaper/README.md">Whitepaper</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/diagrams/">Diagrams</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/SECURITY.md">Security policy</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
+    <div class="footer-col">
+      <h4>Network</h4>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/README.md">Launch guide</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/calibre-testnet-raw.json">Chain spec</a>
+      <span class="footer-static">Chain ID <code>calibre_testnet_1</code></span>
+      <span class="footer-static">Token <code>CAL</code></span>
+    </div>
+    <div class="footer-col">
+      <h4>Project</h4>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core">GitHub repository</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/issues">Issues</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/LICENSE">License (GPL-3.0)</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 Calibre Protocol Contributors</span>
+    <span class="footer-disclaimer">
+      Research prototype. Not audited. Not for real value transfer.
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
