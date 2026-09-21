@@ -1419,3 +1419,62 @@ footer {
   .throughput-visual { padding: 24px; }
   .vision-close p { font-size: 16px; }
 }
+
+/* ════════════════ CONTEXT STRIP ════════════════ */
+
+.context-strip {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(135deg, rgba(247, 147, 26, 0.06) 0%, rgba(88, 166, 255, 0.04) 100%);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 32px 48px;
+}
+
+.context-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.context-icon {
+  font-size: 28px;
+  color: var(--accent);
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.context-text {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.context-text b {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.context-text em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.context-text a {
+  color: var(--accent-2);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.context-text a:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .context-strip { padding: 20px; }
+  .context-inner { flex-direction: column; gap: 12px; text-align: center; }
+  .context-icon { font-size: 22px; }
+  .context-text { font-size: 13px; }
+}

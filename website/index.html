@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calibre Protocol — A Quantum-Resistant Layer-1</title>
+<title>Calibre Protocol — Post-Quantum Digital Cash</title>
 <meta name="description" content="Post-quantum Layer-1 blockchain with real FIPS 204 ML-DSA-44 verification on-chain. Q-UTXO state model, Fast-Path conflict detection.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Calibre Protocol — A Quantum-Resistant Layer-1">
+<meta property="og:title" content="Calibre Protocol — Post-Quantum Digital Cash">
 <meta property="og:description" content="Post-quantum Layer-1 blockchain with real ML-DSA-44 verification on-chain.">
 <meta property="og:url" content="https://bitcore77-calibre.github.io/calibre-core/">
 <meta name="twitter:card" content="summary_large_image">
@@ -41,14 +41,14 @@
       Testnet v0.6.0 live · chain <code>calibre_testnet_1</code>
     </div>
     <h1>
-      Post-quantum money,<br>
+      Post-quantum digital cash,<br>
       <span class="grad">proven on-chain.</span>
     </h1>
     <p class="lead">
-      Calibre is a Layer-1 blockchain where every transaction is a cryptographic
-      claim on an unspent output, signed with <b>real FIPS 204 ML-DSA-44 lattice
-      signatures</b> and verified inside the WASM runtime. Forgery and replay
-      are rejected at block execution — before state changes.
+      A quantum-resistant Layer-1 with <b>real ML-DSA-44 signatures verified
+      inside the runtime</b>. Every spend is a cryptographic claim on an
+      unspent output — signed with lattice math, checked by four independent
+      gates, and settled by a Fast-Path mempool.
     </p>
     <p class="lead-sub">
       No accounts. No nonces. No elliptic curves in the value path.
@@ -62,10 +62,10 @@
       </a>
     </div>
     <div class="hero-stats">
-      <div><b>1,312</b><span>bytes pub key</span></div>
-      <div><b>2,420</b><span>bytes signature</span></div>
-      <div><b>6s</b><span>block time</span></div>
-      <div><b>n=7 f=2</b><span>BFT authorities</span></div>
+      <div><b>FIPS 204</b><span>signature standard</span></div>
+      <div><b>4</b><span>verification gates</span></div>
+      <div><b>μs</b><span>double-spend rejection</span></div>
+      <div><b>6s</b><span>block finality</span></div>
     </div>
   </div>
   <div class="hero-visual" aria-hidden="true">
@@ -111,6 +111,19 @@
     <span class="trust-item">Docker</span>
     <span class="trust-sep">·</span>
     <span class="trust-item">GPL-3.0-only</span>
+  </div>
+</section>
+
+<section class="context-strip">
+  <div class="context-inner">
+    <div class="context-icon">◆</div>
+    <div class="context-text">
+      <b>Post-quantum signatures are 35× larger than ECDSA.</b>
+      Every existing chain is struggling with the throughput cost.
+      Calibre was <em>designed around that constraint</em> from the first line of code —
+      using UTXO aggregation, parallel verification, and Fast-Path mempool settlement.
+      <a href="#size-math">See the engineering →</a>
+    </div>
   </div>
 </section>
 
