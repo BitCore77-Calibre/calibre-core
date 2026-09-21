@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 pub use pallet::*;
 
-mod merkle;
 #[cfg(test)]
 mod tests;
 #[frame_support::pallet]
@@ -125,10 +124,10 @@ pub mod pallet {
         /// Phase 7.2 will replace the body with an incremental SMT update
         /// while keeping this call site intact.
         pub fn compute_utxo_set_root() -> sp_core::H256 {
-            crate::merkle::utxo_set_root(
+            sp_core::H256::from(calibre_merkle::utxo_set_root(
                 UtxoSet::<T>::iter()
-                    .map(|(id, utxo)| (id, Self::hash_utxo(&utxo))),
-            )
+                    .map(|(id, utxo)| (*id.as_fixed_bytes(), *Self::hash_utxo(&utxo).as_fixed_bytes())),
+            ))
         }
 
         /// Hash of a single UTXO's value. Uses SCALE encoding under a

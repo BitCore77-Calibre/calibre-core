@@ -13,6 +13,7 @@ members = [
     "primitives",
     "tools/pq-signer",
     "crates/aegis-crypto",
+    "crates/calibre-merkle",
     "runtime",
 ]
 resolver = "2"
@@ -23,6 +24,7 @@ resolver = "2"
     sp-std = { version = "14.0.0", default-features = false }
     calibre-primitives = { path = "primitives", default-features = false }
     calibre-aegis-crypto = { path = "crates/aegis-crypto", default-features = false }
+    calibre-merkle = { path = "crates/calibre-merkle", default-features = false }
     pallet-qutxo = { path = "pallets/qutxo", default-features = false }
     
 solochain-template-runtime = { path = "./runtime", default-features = false }
