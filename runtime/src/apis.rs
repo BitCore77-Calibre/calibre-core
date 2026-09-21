@@ -43,10 +43,16 @@ use sp_version::RuntimeVersion;
 // Local module imports
 use super::{
 	AccountId, Aura, Balance, Block, Executive, Grandpa, InherentDataExt, Nonce, Runtime,
-	RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment, VERSION,
+	Qutxo, RuntimeCall, RuntimeGenesisConfig, SessionKeys, System, TransactionPayment, VERSION,
 };
 
 impl_runtime_apis! {
+	impl calibre_qutxo_rpc_api::QutxoApi<Block> for Runtime {
+		fn get_inclusion_proof(utxo_id: sp_core::H256) -> Option<calibre_primitives::InclusionProof> {
+			Qutxo::get_inclusion_proof(utxo_id)
+		}
+	}
+
 	impl sp_api::Core<Block> for Runtime {
 		fn version() -> RuntimeVersion {
 			VERSION

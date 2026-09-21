@@ -34,6 +34,8 @@ pallet-transaction-payment.workspace = true
 scale-info = { features = ["derive", "serde"], workspace = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc"] }
 sp-api.workspace = true
+calibre-primitives = { workspace = true, default-features = false }
+calibre-qutxo-rpc-api = { workspace = true, default-features = false }
 sp-block-builder.workspace = true
 sp-consensus-aura = { features = ["serde"], workspace = true }
 sp-consensus-grandpa = { features = ["serde"], workspace = true }
@@ -75,6 +77,8 @@ std = [
 	"scale-info/std",
 	"serde_json/std",
 	"sp-api/std",
+	"calibre-primitives/std",
+	"calibre-qutxo-rpc-api/std",
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
 	"sp-consensus-grandpa/std",
