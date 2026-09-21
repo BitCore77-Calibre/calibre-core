@@ -27,6 +27,17 @@ A light node downloads:
 Total permanent storage: ~2 MB. Sync time: seconds. No trust in
 any RPC.
 
+## Status (end of Phase 7.2d)
+
+- 7.1 ✅ Merkle root tracking in pallet-qutxo.
+- 7.2 ✅ RISC Zero v3.0.6 UTXO inclusion circuit.
+- 7.2d ✅ `qutxo_getInclusionProof` RPC + host CLI proven against live chain.
+
+Full loop verified end-to-end:
+    chain (3 UTXOs) → RPC → host → RISC Zero guest → receipt
+
+All three UTXOs proved against the same on-chain root, path length 2.
+
 ## Architecture
 
     Validators
