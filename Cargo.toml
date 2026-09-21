@@ -14,17 +14,20 @@ members = [
     "tools/pq-signer",
     "crates/aegis-crypto",
     "crates/calibre-merkle",
+    "crates/qutxo-rpc-api",
     "runtime",
 ]
 resolver = "2"
 
 [workspace.dependencies]
     sha3 = { version = "0.10.8", default-features = false }
+    serde = { version = "1.0", default-features = false }
     parity-scale-codec = { version = "3.7.4", default-features = false, features = ["derive"] }
     sp-std = { version = "14.0.0", default-features = false }
     calibre-primitives = { path = "primitives", default-features = false }
     calibre-aegis-crypto = { path = "crates/aegis-crypto", default-features = false }
     calibre-merkle = { path = "crates/calibre-merkle", default-features = false }
+    calibre-qutxo-rpc-api = { path = "crates/qutxo-rpc-api", default-features = false }
     pallet-qutxo = { path = "pallets/qutxo", default-features = false }
     
 solochain-template-runtime = { path = "./runtime", default-features = false }

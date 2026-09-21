@@ -1183,9 +1183,20 @@ version = "0.1.0"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
+ "serde",
  "sp-core",
  "sp-runtime",
  "sp-std",
+]
+
+[[package]]
+name = "calibre-qutxo-rpc-api"
+version = "0.1.0"
+dependencies = [
+ "calibre-primitives",
+ "parity-scale-codec",
+ "sp-api",
+ "sp-core",
 ]
 
 [[package]]
@@ -9532,6 +9543,8 @@ dependencies = [
 name = "solochain-template-runtime"
 version = "0.1.0"
 dependencies = [
+ "calibre-primitives",
+ "calibre-qutxo-rpc-api",
  "frame-benchmarking",
  "frame-executive",
  "frame-metadata-hash-extension",

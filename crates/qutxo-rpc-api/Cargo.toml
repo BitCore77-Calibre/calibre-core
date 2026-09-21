@@ -1,0 +1,19 @@
+[package]
+name = "calibre-qutxo-rpc-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+parity-scale-codec = { workspace = true, default-features = false }
+sp-api = { workspace = true, default-features = false }
+sp-core = { workspace = true, default-features = false }
+calibre-primitives = { workspace = true, default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "parity-scale-codec/std",
+    "sp-api/std",
+    "sp-core/std",
+    "calibre-primitives/std",
+]

@@ -67,6 +67,8 @@ any RPC.
 - **7.0** — SP1 toolchain + hello world circuit
 - **7.1** — MerkleRoot storage in pallet-qutxo
 - **7.2** — The state-proof circuit
+  - ✅ 7.2 — UTXO inclusion circuit (RISC Zero v3.0.6) — shipped
+  - ⏳ 7.2d — RPC + runtime API to serve inclusion proofs from live chain
 - **7.3** — Recursive proof composition (IVC)
 - **7.4** — pallet-zk-verifier + on-chain STARK verification
 - **7.5** — calibre-light library + libp2p pub/sub
