@@ -206,3 +206,44 @@ fn root_is_deterministic_across_insertion_order() {
         compute_root_after_inserting(&[3, 2, 1]),
     );
 }
+
+#[test]
+fn inclusion_proof_folds_to_root() {
+    new_test_ext().execute_with(|| {
+        for i in 1u8..=3 {
+            UtxoSet::<Test>::insert(
+                H256::from([i; 32]),
+                Utxo { value: i as u128 * 100, lock: QuantumLock::SingleSig([i; 32]) },
+            );
+        }
+        Qutxo::mark_utxo_set_dirty();
+        Qutxo::on_finalize(2);
+
+        let target = H256::from([2u8; 32]);
+        let proof = Qutxo::get_inclusion_proof(target).expect("present");
+        assert_eq!(proof.utxo_id, target);
+        assert_eq!(proof.root, UtxoSetRoot::<Test>::get());
+
+        // Independently fold the path via calibre_merkle.
+        let mut cur = calibre_merkle::leaf_hash(
+            target.as_fixed_bytes(),
+            proof.value_hash.as_fixed_bytes(),
+        );
+        for step in &proof.path {
+            let sib = step.sibling.as_fixed_bytes();
+            cur = if step.current_is_left {
+                calibre_merkle::inner_hash(&cur, sib)
+            } else {
+                calibre_merkle::inner_hash(sib, &cur)
+            };
+        }
+        assert_eq!(cur, *proof.root.as_fixed_bytes(), "path does not fold to root");
+    });
+}
+
+#[test]
+fn inclusion_proof_missing_utxo_is_none() {
+    new_test_ext().execute_with(|| {
+        assert!(Qutxo::get_inclusion_proof(H256::from([42u8; 32])).is_none());
+    });
+}

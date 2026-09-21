@@ -123,6 +123,42 @@ pub mod pallet {
         /// O(n log n) in the number of UTXOs. Acceptable for testnet.
         /// Phase 7.2 will replace the body with an incremental SMT update
         /// while keeping this call site intact.
+        /// Build an inclusion proof for one UTXO.
+        /// Reads the whole UTXO set (O(n log n)) — acceptable for
+        /// testnet. Returns None if `utxo_id` is not in the set.
+        pub fn get_inclusion_proof(
+            utxo_id: sp_core::H256,
+        ) -> Option<calibre_primitives::InclusionProof> {
+            let leaves: sp_std::vec::Vec<(calibre_merkle::Hash, calibre_merkle::Hash)> =
+                UtxoSet::<T>::iter()
+                    .map(|(id, utxo)| {
+                        (*id.as_fixed_bytes(), *Self::hash_utxo(&utxo).as_fixed_bytes())
+                    })
+                    .collect();
+
+            let tid: calibre_merkle::Hash = *utxo_id.as_fixed_bytes();
+            let path = calibre_merkle::merkle_path(&leaves, &tid)?;
+            let root = calibre_merkle::utxo_set_root(leaves.clone());
+
+            let value_hash = leaves
+                .iter()
+                .find(|(id, _)| *id == tid)
+                .map(|(_, v)| *v)?;
+
+            Some(calibre_primitives::InclusionProof {
+                root: sp_core::H256::from(root),
+                utxo_id,
+                value_hash: sp_core::H256::from(value_hash),
+                path: path
+                    .into_iter()
+                    .map(|(sib, is_left)| calibre_primitives::MerkleStep {
+                        sibling: sp_core::H256::from(sib),
+                        current_is_left: is_left,
+                    })
+                    .collect(),
+            })
+        }
+
         pub fn compute_utxo_set_root() -> sp_core::H256 {
             sp_core::H256::from(calibre_merkle::utxo_set_root(
                 UtxoSet::<T>::iter()
