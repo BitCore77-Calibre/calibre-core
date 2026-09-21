@@ -2,7 +2,7 @@ use calibre_merkle::{inner_hash, leaf_hash, Hash};
 use risc0_zkvm::guest::env;
 
 fn main() {
-    // ── Public inputs ──
+    // ── Public inputs (via env::read) ──
     let root: Hash = env::read();
     let utxo_id: Hash = env::read();
     let value_hash: Hash = env::read();
@@ -23,8 +23,6 @@ fn main() {
 
     assert_eq!(current, root, "merkle path does not fold to root");
 
-    // ── Public outputs ──
-    env::commit(&root);
-    env::commit(&utxo_id);
-    env::commit(&value_hash);
+    // ── Public outputs (journal, single tuple) ──
+    env::commit(&(root, utxo_id, value_hash));
 }

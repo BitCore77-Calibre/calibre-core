@@ -8,3 +8,4 @@ methods = { path = "../methods" }
 risc0-zkvm = { version = "^3.0.6" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = "1.0"
+calibre-merkle = { path = "../../crates/calibre-merkle" }
