@@ -22,7 +22,7 @@ use serde_json::Value;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
 use sp_genesis_builder::{self, PresetId};
-use sp_keyring::Sr25519Keyring;
+use sp_keyring::{Ed25519Keyring, Sr25519Keyring};
 
 // Returns the genesis config presets populated with given parameters.
 fn testnet_genesis(
@@ -86,11 +86,42 @@ pub fn local_config_genesis() -> Value {
 	)
 }
 
+/// Chain spec identifier for the Calibre staging network (7 authorities).
+pub const CALIBRE_STAGING_RUNTIME_PRESET: &str = "calibre_staging";
+
+/// Return the Calibre staging genesis config: 7 Aura + 7 GRANDPA authorities
+/// using well-known `sp_keyring` identities (Alice..Ferdie + One).
+///
+/// NOT for production: these keys are public and live in `sp_keyring`.
+/// Purpose: exercise 7-validator consensus on LAN before real keygen tooling
+/// lands. Each validator inserts its own seed (`//Alice`, `//Bob`, ...) into
+/// its local keystore via `key insert`.
+pub fn staging_testnet_genesis() -> Value {
+	let authorities: Vec<(Sr25519Keyring, Ed25519Keyring)> = vec![
+		(Sr25519Keyring::Alice, Ed25519Keyring::Alice),
+		(Sr25519Keyring::Bob, Ed25519Keyring::Bob),
+		(Sr25519Keyring::Charlie, Ed25519Keyring::Charlie),
+		(Sr25519Keyring::Dave, Ed25519Keyring::Dave),
+		(Sr25519Keyring::Eve, Ed25519Keyring::Eve),
+		(Sr25519Keyring::Ferdie, Ed25519Keyring::Ferdie),
+		(Sr25519Keyring::One, Ed25519Keyring::One),
+	];
+	let initial_authorities: Vec<(AuraId, GrandpaId)> = authorities
+		.iter()
+		.map(|(s, e)| (s.public().into(), e.public().into()))
+		.collect();
+	let endowed_accounts: Vec<AccountId> =
+		authorities.iter().map(|(s, _)| s.to_account_id()).collect();
+	let root = Sr25519Keyring::Alice.to_account_id();
+	testnet_genesis(initial_authorities, endowed_accounts, root)
+}
+
 /// Provides the JSON representation of predefined genesis config for given `id`.
 pub fn get_preset(id: &PresetId) -> Option<Vec<u8>> {
 	let patch = match id.as_ref() {
 		sp_genesis_builder::DEV_RUNTIME_PRESET => development_config_genesis(),
 		sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET => local_config_genesis(),
+		CALIBRE_STAGING_RUNTIME_PRESET => staging_testnet_genesis(),
 		_ => return None,
 	};
 	Some(
@@ -105,5 +136,6 @@ pub fn preset_names() -> Vec<PresetId> {
 	vec![
 		PresetId::from(sp_genesis_builder::DEV_RUNTIME_PRESET),
 		PresetId::from(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET),
+		PresetId::from(CALIBRE_STAGING_RUNTIME_PRESET),
 	]
 }

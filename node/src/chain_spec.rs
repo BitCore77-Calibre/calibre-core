@@ -27,3 +27,15 @@ pub fn local_chain_spec() -> Result<ChainSpec, String> {
 	.with_genesis_config_preset_name(sp_genesis_builder::LOCAL_TESTNET_RUNTIME_PRESET)
 	.build())
 }
+
+pub fn calibre_staging_chain_spec() -> Result<ChainSpec, String> {
+	Ok(ChainSpec::builder(
+		WASM_BINARY.ok_or_else(|| "Staging wasm not available".to_string())?,
+		None,
+	)
+	.with_name("Calibre Staging (7 validators)")
+	.with_id("calibre_staging")
+	.with_chain_type(ChainType::Local)
+	.with_genesis_config_preset_name(solochain_template_runtime::CALIBRE_STAGING_RUNTIME_PRESET)
+	.build())
+}
