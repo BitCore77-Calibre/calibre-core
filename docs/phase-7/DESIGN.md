@@ -38,6 +38,31 @@ Full loop verified end-to-end:
 
 All three UTXOs proved against the same on-chain root, path length 2.
 
+## Block time
+
+Currently **6 seconds** (solochain template default, `MILLISECS_PER_BLOCK = 6000`).
+Not a deliberate choice. Revisit before mainnet: PQ sig verify is ~1 ms/input,
+argues against <4s. Defer until 7.5 light client is in use and we have data.
+
+## Throughput testing (deferred)
+
+Not yet done — no realistic workload exists. Planned: Phase 7.5b.
+
+Measure: max tx/block, max ML-DSA verifications/block, tx-pool saturation,
+latency under load. Synthetic bench: /tmp/mint/bench.js via polkadot-js.
+
+## Why STARKs matter for a PQ chain
+
+Groth16/PLONK rely on elliptic-curve pairings — Shor-vulnerable.
+A "PQ chain" with a Groth16 light client is a contradiction: the
+light client is the attack surface.
+
+Calibre uses RISC Zero (STARK-based, hash-only assumptions). Quantum-safe
+by construction, same as the signatures. Structural advantage over chains
+that add PQ signatures but keep classical ZK.
+
+Reference: ZK-ACE (2026) — "Groth16 is not post-quantum secure."
+
 ## Architecture
 
     Validators
