@@ -7,7 +7,7 @@ edition = "2021"
 sp-runtime-interface = { version = "29.0.1", default-features = false }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-risc0-verifier = { git = "https://github.com/HorizenLabs/risc0-verifier.git", tag = "v0.11.0" }
+risc0-zkvm = { version = "3.0.6", default-features = false, features = ["client"] }
 ciborium = "0.2"
 
 [features]
