@@ -36,13 +36,25 @@ if [[ -z "${ANDROID_NDK_HOME:-}" && -z "${ANDROID_HOME:-}" ]]; then
     exit 1
 fi
 
-NDK="${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk}"
-# find the newest NDK version directory
-NDK_ROOT="$(ls -d "$NDK"/* 2>/dev/null | sort -V | tail -1)"
-if [[ -z "$NDK_ROOT" ]]; then
-    echo "ERROR: no NDK found under $NDK" >&2
+# Resolve NDK root. ANDROID_NDK_HOME typically points at the version
+# directory (e.g. .../ndk/android-ndk-r27c), so use it directly.
+# Otherwise scan ANDROID_HOME/ndk for the newest version.
+if [[ -n "${ANDROID_NDK_HOME:-}" ]]; then
+    NDK_ROOT="$ANDROID_NDK_HOME"
+else
+    if [[ -z "${ANDROID_HOME:-}" ]]; then
+        echo "ERROR: set ANDROID_NDK_HOME or ANDROID_HOME" >&2
+        exit 1
+    fi
+    # Trailing slash -> ls -d matches only directories.
+    NDK_ROOT="$(ls -d "${ANDROID_HOME}/ndk"/*/ 2>/dev/null | sort -V | tail -1)"
+    NDK_ROOT="${NDK_ROOT%/}"
+fi
+if [[ -z "$NDK_ROOT" || ! -d "$NDK_ROOT" ]]; then
+    echo "ERROR: resolved NDK_ROOT=$NDK_ROOT is not a directory" >&2
     exit 1
 fi
+echo "==> NDK_ROOT=$NDK_ROOT"
 HOST_TAG="linux-x86_64"
 [[ "$(uname)" == "Darwin" ]] && HOST_TAG="darwin-x86_64"
 TOOLCHAIN="$NDK_ROOT/toolchains/llvm/prebuilt/$HOST_TAG"
