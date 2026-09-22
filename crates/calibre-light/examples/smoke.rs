@@ -15,15 +15,27 @@ async fn main() {
 
     let client = LightClient::connect(rpc);
 
-    println!("[1] sync() — fetching current UTXO root...");
+    println!("=== Trust tier 1: sync() ===");
     match client.sync().await {
-        Ok(root) => println!("    root:        {}", hex(&root)),
+        Ok(root) => println!("    root: {}", hex(&root)),
         Err(e) => { eprintln!("    sync failed: {}", e); std::process::exit(1); }
     }
-    println!("    known_roots: {}", client.known_roots());
+
+    println!("\n=== Trust tier 2: sync_verified() ===");
+    match client.sync_verified().await {
+        Ok(sr) => {
+            println!("    root:         {}", hex(&sr.utxo_set_root));
+            println!("    block_number: {}", sr.block_number);
+            println!("    block_hash:   {}", hex(&sr.block_hash));
+            println!("    verified:     {}", sr.verified);
+        }
+        Err(e) => { eprintln!("    sync_verified failed: {}", e); std::process::exit(1); }
+    }
+
+    println!("\n    known_roots: {}", client.known_roots());
 
     let Some(hex_id) = utxo_hex else {
-        println!("\n[2] no utxo_id given — pass one as 2nd arg to test inclusion");
+        println!("\n[no utxo_id given — pass one as 2nd arg to test inclusion]");
         return;
     };
 
@@ -33,14 +45,13 @@ async fn main() {
         arr[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap();
     }
 
-    println!("\n[2] utxo() — fetching and verifying inclusion...");
+    println!("\n=== Inclusion proof for {} ===", hex_id);
     match client.utxo(arr).await {
         Ok(Some(info)) => {
-            println!("    utxo_id:    {}", hex(&info.utxo_id));
             println!("    value_hash: {}", hex(&info.value_hash));
             println!("    root:       {}", hex(&info.root));
             println!("    path_len:   {}", info.path_len);
-            println!("\n    ✅ VERIFIED (locally folded to known root)");
+            println!("\n    ✅ VERIFIED against tier-2 root");
         }
         Ok(None) => println!("    UTXO not found (null)"),
         Err(e) => println!("    error: {}", e),
