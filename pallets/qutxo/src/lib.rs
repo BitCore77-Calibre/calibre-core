@@ -1,6 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 pub use pallet::*;
 
+pub mod weights;
+pub use weights::WeightInfo;
+
 #[cfg(test)]
 mod tests;
 #[frame_support::pallet]
@@ -12,6 +15,7 @@ pub mod pallet {
     use calibre_primitives::{QuantumLock, Utxo, TransactionInput, TransactionOutput};
     use frame_system::ensure_root;
     use calibre_aegis_crypto::AegisWitness;
+    use crate::weights::WeightInfo;
 
     #[pallet::pallet] pub struct Pallet<T>(_);
     #[pallet::config]
@@ -20,7 +24,8 @@ pub mod pallet {
         type Balance: Member + Parameter + AtLeast32BitUnsigned + Default + Copy + MaxEncodedLen;
         #[pallet::constant] type MaxTxInputs: Get<u32>;
         #[pallet::constant] type MaxTxOutputs: Get<u32>;
-    }
+		type WeightInfo: WeightInfo;
+	}
     #[pallet::storage] #[pallet::getter(fn utxo_set)]
     pub type UtxoSet<T: Config> = StorageMap<_, Blake2_128Concat, sp_core::H256, Utxo<T::Balance>, OptionQuery>;
     #[pallet::storage] #[pallet::getter(fn total_issuance)]
@@ -55,7 +60,11 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::call_index(0)] #[pallet::weight(Weight::from_parts(100_000_000, 0))]
+        #[pallet::call_index(0)]
+        #[pallet::weight(T::WeightInfo::execute_utxo_tx(
+            tx.inputs.len() as u32,
+            tx.outputs.len() as u32,
+        ))]
         pub fn execute_utxo_tx(origin: OriginFor<T>, tx: Transaction<T::Balance>) -> DispatchResult {
             ensure_none(origin)?;
             ensure!(tx.inputs.len() <= T::MaxTxInputs::get() as usize, Error::<T>::TransactionTooLarge);
@@ -91,7 +100,7 @@ pub mod pallet {
             Ok(())
         }
         #[pallet::call_index(1)]
-        #[pallet::weight(Weight::from_parts(10_000_000, 0))]
+        #[pallet::weight(T::WeightInfo::sudo_mint())]
         pub fn sudo_mint(origin: OriginFor<T>, value: T::Balance, recipient_lock: [u8; 32]) -> DispatchResult {
             ensure_root(origin)?;
             // Create a deterministic genesis hash for the first UTXO

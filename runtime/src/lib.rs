@@ -203,7 +203,8 @@ impl pallet_qutxo::Config for Runtime {
 	type Balance = Balance;
 	type MaxTxInputs = QutxoMaxTxInputs;
 	type MaxTxOutputs = QutxoMaxTxOutputs;
-}
+		type WeightInfo = pallet_qutxo::weights::SubstrateWeight<Runtime>;
+	}
 
 parameter_types! {
 	pub const ZkGuestImageId: [u8; 32] = [

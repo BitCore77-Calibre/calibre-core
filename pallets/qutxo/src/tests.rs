@@ -64,6 +64,7 @@ impl pallet_qutxo::Config for Test {
     type Balance = u128;
     type MaxTxInputs = ConstU32<16>;
     type MaxTxOutputs = ConstU32<16>;
+	type WeightInfo = ();
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
