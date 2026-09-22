@@ -17,3 +17,5 @@ crates/calibre-light/bindings/**/*.so
 crates/calibre-light/bindings/**/*.a
 crates/calibre-light/bindings/**/*.dylib
 crates/calibre-light/bindings/**/*.dll
+deploy/bin/
+deploy/secrets/

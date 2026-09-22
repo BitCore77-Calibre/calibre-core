@@ -1,0 +1,185 @@
+# Calibre 7-validator local testnet.
+#
+# Usage:
+#   cd ~/calibre-template
+#   docker compose -f deploy/docker-compose.yml build
+#   docker compose -f deploy/docker-compose.yml up -d
+#   docker compose -f deploy/docker-compose.yml logs -f v1
+#
+# Tear down (keep chain data):
+#   docker compose -f deploy/docker-compose.yml down
+#
+# Tear down + wipe chain data:
+#   docker compose -f deploy/docker-compose.yml down -v
+
+x-validator-defaults: &validator-defaults
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: calibre-node:staging
+  restart: unless-stopped
+  networks:
+    - calibre-net
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 1G
+      reservations:
+        cpus: '0.25'
+        memory: 256M
+  healthcheck:
+    test: ["CMD-SHELL", "curl -sf -X POST -H 'Content-Type: application/json' -d '{\"id\":1,\"jsonrpc\":\"2.0\",\"method\":\"system_health\",\"params\":[]}' http://localhost:9944 || exit 1"]
+    interval: 30s
+    timeout: 5s
+    retries: 5
+    start_period: 40s
+
+services:
+  # ── v1: seed node. No --bootnodes. Everyone else connects here. ──
+  v1:
+    <<: *validator-defaults
+    container_name: calibre-v1
+    hostname: v1
+    environment:
+      VALIDATOR_NAME: v1
+      KEYRING: Alice
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+    ports:
+      - "30333:30333"   # p2p — exposed so host tooling can reach it
+      - "9944:9944"     # rpc — exposed for bench and RPC queries
+      - "9615:9615"     # prometheus — exposed for scraping
+    volumes:
+      - v1-data:/data
+      - ./secrets/v1-network-key:/seed/v1-network-key:ro
+
+  v2:
+    <<: *validator-defaults
+    container_name: calibre-v2
+    hostname: v2
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v2
+      KEYRING: Bob
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9945:9944"
+    volumes:
+      - v2-data:/data
+
+  v3:
+    <<: *validator-defaults
+    container_name: calibre-v3
+    hostname: v3
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v3
+      KEYRING: Charlie
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9946:9944"
+    volumes:
+      - v3-data:/data
+
+  v4:
+    <<: *validator-defaults
+    container_name: calibre-v4
+    hostname: v4
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v4
+      KEYRING: Dave
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9947:9944"
+    volumes:
+      - v4-data:/data
+
+  v5:
+    <<: *validator-defaults
+    container_name: calibre-v5
+    hostname: v5
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v5
+      KEYRING: Eve
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9948:9944"
+    volumes:
+      - v5-data:/data
+
+  v6:
+    <<: *validator-defaults
+    container_name: calibre-v6
+    hostname: v6
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v6
+      KEYRING: Ferdie
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9949:9944"
+    volumes:
+      - v6-data:/data
+
+  v7:
+    <<: *validator-defaults
+    container_name: calibre-v7
+    hostname: v7
+    depends_on:
+      - v1
+    environment:
+      VALIDATOR_NAME: v7
+      KEYRING: One
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: /dns4/v1/tcp/30333/p2p/12D3KooWEJ4SJw7JABKbWLBJnGLbZvt37Zua4KWGMEHZuBfAoaWD
+    ports:
+      - "9950:9944"
+    volumes:
+      - v7-data:/data
+
+networks:
+  calibre-net:
+    driver: bridge
+    name: calibre-net
+
+volumes:
+  v1-data:
+  v2-data:
+  v3-data:
+  v4-data:
+  v5-data:
+  v6-data:
+  v7-data:
