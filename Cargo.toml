@@ -15,6 +15,7 @@ members = [
     "crates/aegis-crypto",
     "crates/calibre-merkle",
     "crates/qutxo-rpc-api",
+    "crates/calibre-light",
     "runtime",
 ]
 resolver = "2"
