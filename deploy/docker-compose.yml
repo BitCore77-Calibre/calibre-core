@@ -20,6 +20,8 @@ x-validator-defaults: &validator-defaults
   restart: unless-stopped
   networks:
     - calibre-net
+  cap_add:
+    - NET_ADMIN   # required for tc netem latency injection
   deploy:
     resources:
       limits:
