@@ -125,9 +125,48 @@ Tear down:
     docker compose -f deploy/docker-compose.yml down       # keep data
     docker compose -f deploy/docker-compose.yml down -v    # wipe data
 
+
+## Throughput benchmark (2026-09-22)
+
+5000 ML-DSA-44-signed UTXO spends submitted to v1's RPC via
+`calibre-bench burst`, concurrency 40. Preceded by 5000 `sudo_mint`
+calls to seed the UTXO set.
+
+### Chain-level result
+
+| Metric | Value |
+|--------|-------|
+| Peak block capacity | ~1014 txs / 6 s block = **169 TPS** |
+| Consecutive full blocks | 4 |
+| Finality lag under load | 2 blocks (unchanged from idle) |
+| Pool rejections | 0 |
+| Inclusion rate | 5000/5000 |
+
+Single-validator baseline was 167 TPS. Multi-validator is 169 TPS.
+**The 7-validator network does not degrade throughput.**
+
+### Per-block weight (full blocks)
+
+- refTime: 1.002e12 / 1.5e12 cap = 67% used
+- proof_size (bytes): 4.19e6 / 15.7e6 cap = 27% used
+- Neither weight nor byte limit saturated
+
+There is a soft cap around ~1014 txs/block that is not the configured
+weight or byte limit. Likely a block producer time budget or extrinsic
+count constraint in the current SDK version. Flagged for follow-up;
+not blocking.
+
+### Resource use
+
+| State | CPU | RAM |
+|-------|-----|-----|
+| Idle | ~1.1% | ~46 MB |
+| Under load | ~0.5-1.0% | ~150 MB |
+
+Memory tripled under load but remained under 200 MB per validator.
+
 ## What this does NOT cover
 
-- Throughput under multi-validator load (bench pending)
 - Cross-host WAN (this was one host with injected latency)
 - Real key generation (uses sp_keyring test identities)
 - Byzantine behavior / slashing / equivocation
