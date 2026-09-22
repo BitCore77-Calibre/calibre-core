@@ -98,6 +98,11 @@ pub mod pallet {
             let mut seed = Vec::new();
             seed.extend_from_slice(b"calibre-mint");
             seed.extend_from_slice(&frame_system::Pallet::<T>::block_number().encode());
+            // Include recipient in the seed so multiple mints in one block
+            // produce distinct UTXOs. Without this, two recipients funded
+            // in the same block collide on the same utxo_hash and the
+            // second overwrites the first.
+            seed.extend_from_slice(&recipient_lock);
             let genesis_hash = sp_core::H256::from(sp_core::blake2_256(&seed));
             let utxo_hash = Self::calculate_utxo_hash(genesis_hash, 0);
             

@@ -1420,6 +1420,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "calibre-bench"
+version = "0.1.0"
+dependencies = [
+ "blake2 0.10.6",
+ "dilithium-rs",
+ "hex",
+ "parity-scale-codec",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "calibre-light"
 version = "0.1.0"
 dependencies = [

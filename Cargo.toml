@@ -13,6 +13,7 @@ members = [
     "pallets/zk-verifier",
     "primitives",
     "tools/pq-signer",
+    "tools/bench",
     "crates/aegis-crypto",
     "crates/calibre-merkle",
     "crates/calibre-risc0-host",
