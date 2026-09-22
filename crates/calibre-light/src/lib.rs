@@ -3,6 +3,11 @@
 //! Trust tier 1 (`sync`): trusts the node for the UTXO set root.
 //! Trust tier 2 (`sync_verified`): verifies the root is a real leaf in
 //! the state trie anchored to a finalized block's `state_root`.
+//!
+//! Freshness: tier-2 roots carry the block number they were verified
+//! at. `utxo()` rejects proofs whose root is more than `max_proof_age`
+//! blocks older than the latest verified block. `sync_verified()`
+//! rejects a finalized head that moves backwards.
 
 mod error;
 mod rpc;
@@ -13,6 +18,7 @@ pub use error::LightError;
 use calibre_merkle::{inner_hash, leaf_hash};
 use parity_scale_codec::Encode;
 use rpc::RpcClient;
+use root_tracker::RootEntry;
 use smoldot::trie::{
     bytes_to_nibbles,
     proof_decode::{decode_and_verify_proof, Config as TrieConfig},
@@ -24,12 +30,18 @@ pub(crate) type Hash = [u8; 32];
 const UTXO_SET_ROOT_KEY: &str =
     "0x8feb94cbd57b65eb1436ba6db973e04df4b8d3c19af7d55511d730e48dc7dc87";
 
+/// Default freshness window for tier-2 proofs, in blocks.
+pub const DEFAULT_MAX_PROOF_AGE_BLOCKS: u32 = 100;
+
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct UtxoInfo {
     pub utxo_id: Vec<u8>,
     pub value_hash: Vec<u8>,
     pub root: Vec<u8>,
     pub path_len: u32,
+    /// Age of the proof's root, in blocks, relative to the latest verified
+    /// block. `None` if the root was not verified (tier 1).
+    pub proof_age_blocks: Option<u32>,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -46,6 +58,7 @@ pub struct LightClient {
     roots: Mutex<root_tracker::RootTracker>,
     current_root: Mutex<Option<Hash>>,
     last_block: Mutex<Option<(u32, Hash)>>,
+    max_proof_age: Mutex<u32>,
 }
 
 fn parse_hash(s: &str) -> Result<Hash, LightError> {
@@ -82,8 +95,6 @@ fn decode_hex(s: &str) -> Result<Vec<u8>, LightError> {
     hex::decode(s).map_err(|e| LightError::Hex(e.to_string()))
 }
 
-/// Verify that `key` exists in the state trie rooted at `state_root`
-/// and return its value. Uses a standard Substrate state proof.
 fn verify_state_value(
     state_root: &Hash,
     key: &[u8],
@@ -113,10 +124,22 @@ impl LightClient {
             roots: Mutex::new(root_tracker::RootTracker::new(16)),
             current_root: Mutex::new(None),
             last_block: Mutex::new(None),
+            max_proof_age: Mutex::new(DEFAULT_MAX_PROOF_AGE_BLOCKS),
         })
     }
 
+    /// Override the freshness window for tier-2 proofs.
+    pub fn set_max_proof_age(&self, blocks: u32) {
+        *self.max_proof_age.lock().unwrap() = blocks;
+    }
+
+    pub fn max_proof_age(&self) -> u32 {
+        *self.max_proof_age.lock().unwrap()
+    }
+
     /// Trust tier 1: fetch root via `state_getStorage`, trust the node.
+    /// Root is recorded without block metadata; staleness checks do not
+    /// apply to tier-1 roots.
     pub async fn sync(&self) -> Result<Vec<u8>, LightError> {
         let resp = self
             .rpc
@@ -129,7 +152,12 @@ impl LightClient {
 
         {
             let mut roots = self.roots.lock().unwrap();
-            roots.push(root);
+            roots.push(RootEntry {
+                root,
+                block_number: None,
+                block_hash: None,
+                verified: false,
+            });
         }
         {
             let mut cur = self.current_root.lock().unwrap();
@@ -138,9 +166,11 @@ impl LightClient {
         Ok(root.to_vec())
     }
 
-    /// Trust tier 2: fetch the finalized header, fetch a state proof for
-    /// `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
-    /// Returns the root plus the block hash and number it was proved against.
+    /// Trust tier 2: verify the UTXO set root against a finalized
+    /// block's `state_root`, via a Substrate state-trie proof.
+    ///
+    /// Rejects if the finalized head moved backwards since the last
+    /// successful `sync_verified()`.
     pub async fn sync_verified(&self) -> Result<SyncResult, LightError> {
         // 1. Finalized head
         let r = self.rpc.call("chain_getFinalizedHead", serde_json::json!([])).await?;
@@ -167,7 +197,20 @@ impl LightClient {
         )
         .map_err(|e| LightError::Parse(format!("block number: {}", e)))?;
 
-        // 3. Read proof for UtxoSetRoot
+        // 3. Reject backwards movement of finalized head.
+        {
+            let lb = self.last_block.lock().unwrap();
+            if let Some((prev, _)) = *lb {
+                if block_number < prev {
+                    return Err(LightError::FinalizedHeadRegressed {
+                        prev,
+                        now: block_number,
+                    });
+                }
+            }
+        }
+
+        // 4. State proof for UtxoSetRoot
         let r = self
             .rpc
             .call(
@@ -187,16 +230,20 @@ impl LightClient {
             .collect();
         let proof_nodes = proof_nodes?;
 
-        // 4. Verify
+        // 5. Verify
         let key_bytes = decode_hex(UTXO_SET_ROOT_KEY)?;
         let value = verify_state_value(&state_root, &key_bytes, &proof_nodes)?;
-
-        // 5. SCALE-decode H256 (32 raw bytes)
         let root = vec_to_hash(&value)?;
 
+        // 6. Record
         {
             let mut roots = self.roots.lock().unwrap();
-            roots.push(root);
+            roots.push(RootEntry {
+                root,
+                block_number: Some(block_number),
+                block_hash: Some(block_hash),
+                verified: true,
+            });
         }
         {
             let mut cur = self.current_root.lock().unwrap();
@@ -234,13 +281,31 @@ impl LightClient {
         let vh = parse_hash(resp["value_hash"].as_str()
             .ok_or_else(|| LightError::Parse("value_hash".into()))?)?;
 
-        {
+        // Look up entry; extract block metadata for staleness check.
+        let (verified, entry_block, proof_age) = {
             let roots = self.roots.lock().unwrap();
-            if !roots.contains(&root) {
-                return Err(LightError::UnknownRoot);
+            let entry = roots.find(&root).ok_or(LightError::UnknownRoot)?;
+            let age = if entry.verified {
+                roots.latest_verified_block().and_then(|cur| {
+                    entry.block_number.map(|bn| cur.saturating_sub(bn))
+                })
+            } else {
+                None
+            };
+            (entry.verified, entry.block_number, age)
+        };
+
+        if verified {
+            let max = *self.max_proof_age.lock().unwrap();
+            if let Some(age) = proof_age {
+                if age > max {
+                    return Err(LightError::StaleProof { age_blocks: age, max_blocks: max });
+                }
             }
         }
+        let _ = entry_block;
 
+        // Fold the path locally.
         let mut cur = leaf_hash(&rid, &vh);
         let path = resp["path"].as_array()
             .ok_or_else(|| LightError::Parse("path".into()))?;
@@ -261,6 +326,7 @@ impl LightClient {
             value_hash: vh.to_vec(),
             root: root.to_vec(),
             path_len: path.len() as u32,
+            proof_age_blocks: proof_age,
         }))
     }
 
@@ -274,6 +340,10 @@ impl LightClient {
 
     pub fn last_block(&self) -> Option<Vec<u8>> {
         self.last_block.lock().unwrap().as_ref().map(|(_n, h)| h.to_vec())
+    }
+
+    pub fn last_verified_block_number(&self) -> Option<u32> {
+        self.roots.lock().unwrap().latest_verified_block()
     }
 }
 

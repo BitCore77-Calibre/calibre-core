@@ -15,13 +15,13 @@ async fn main() {
 
     let client = LightClient::connect(rpc);
 
-    println!("=== Trust tier 1: sync() ===");
+    println!("=== Tier 1: sync() ===");
     match client.sync().await {
         Ok(root) => println!("    root: {}", hex(&root)),
         Err(e) => { eprintln!("    sync failed: {}", e); std::process::exit(1); }
     }
 
-    println!("\n=== Trust tier 2: sync_verified() ===");
+    println!("\n=== Tier 2: sync_verified() ===");
     match client.sync_verified().await {
         Ok(sr) => {
             println!("    root:         {}", hex(&sr.utxo_set_root));
@@ -32,10 +32,12 @@ async fn main() {
         Err(e) => { eprintln!("    sync_verified failed: {}", e); std::process::exit(1); }
     }
 
-    println!("\n    known_roots: {}", client.known_roots());
+    println!("\n    known_roots:           {}", client.known_roots());
+    println!("    last_verified_block:   {:?}", client.last_verified_block_number());
+    println!("    max_proof_age (blocks): {}", client.max_proof_age());
 
     let Some(hex_id) = utxo_hex else {
-        println!("\n[no utxo_id given — pass one as 2nd arg to test inclusion]");
+        println!("\n[no utxo_id given]");
         return;
     };
 
@@ -45,15 +47,16 @@ async fn main() {
         arr[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).unwrap();
     }
 
-    println!("\n=== Inclusion proof for {} ===", hex_id);
+    println!("\n=== Inclusion proof ===");
     match client.utxo(arr).await {
         Ok(Some(info)) => {
-            println!("    value_hash: {}", hex(&info.value_hash));
-            println!("    root:       {}", hex(&info.root));
-            println!("    path_len:   {}", info.path_len);
+            println!("    value_hash:      {}", hex(&info.value_hash));
+            println!("    root:            {}", hex(&info.root));
+            println!("    path_len:        {}", info.path_len);
+            println!("    proof_age_blocks: {:?}", info.proof_age_blocks);
             println!("\n    ✅ VERIFIED against tier-2 root");
         }
-        Ok(None) => println!("    UTXO not found (null)"),
+        Ok(None) => println!("    UTXO not found"),
         Err(e) => println!("    error: {}", e),
     }
 }

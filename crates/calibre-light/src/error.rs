@@ -14,4 +14,8 @@ pub enum LightError {
     BadPath,
     #[error("hex: {0}")]
     Hex(String),
+    #[error("proof is stale: age {age_blocks} blocks (max {max_blocks})")]
+    StaleProof { age_blocks: u32, max_blocks: u32 },
+    #[error("finalized head went backwards: was {prev}, now {now}")]
+    FinalizedHeadRegressed { prev: u32, now: u32 },
 }
