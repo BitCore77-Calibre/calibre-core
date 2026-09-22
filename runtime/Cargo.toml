@@ -28,6 +28,7 @@ pallet-grandpa.workspace = true
 pallet-sudo.workspace = true
 pallet-template.workspace = true
 pallet-qutxo.workspace = true
+pallet-zk-verifier.workspace = true
 pallet-timestamp.workspace = true
 pallet-transaction-payment-rpc-runtime-api.workspace = true
 pallet-transaction-payment.workspace = true
@@ -71,6 +72,7 @@ std = [
 	"pallet-sudo/std",
 	"pallet-template/std",
 		"pallet-qutxo/std",
+	"pallet-zk-verifier/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-transaction-payment/std",

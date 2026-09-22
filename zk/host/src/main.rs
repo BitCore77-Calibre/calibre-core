@@ -73,6 +73,26 @@ fn main() {
         .receipt;
     receipt.verify(CALIBRE_ZK_GUEST_ID).unwrap();
 
+    // risc0_verifier::Proof is a struct with ONE field: `inner`.
+    // The zkvm Receipt has { journal, inner, metadata } — we must
+    // serialize only `inner` for the verifier to deserialize correctly.
+
+    let mut buf = Vec::new();
+    ciborium::into_writer(&receipt, &mut buf).expect("serialize");
+    println!("receipt.inner bytes (ciborium): {}", buf.len());
+    std::fs::write("/tmp/calibre-receipt.cbor", &buf).expect("write /tmp");
+
+    println!("journal bytes: {}", receipt.journal.bytes.len());
+    std::fs::write("/tmp/calibre-journal.bin", &receipt.journal.bytes).expect("write /tmp");
+
+    // Print sha256 of journal.bytes for our own sanity check
+
+    let hex: String = CALIBRE_ZK_GUEST_ID
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect();
+    println!("image_id: 0x{}", hex);
+
     let (j_root, j_id, j_val): (Hash, Hash, Hash) = receipt.journal.decode().unwrap();
     assert_eq!(j_root, root);
     assert_eq!(j_id, utxo_id);

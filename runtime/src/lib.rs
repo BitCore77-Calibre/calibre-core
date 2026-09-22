@@ -10,6 +10,7 @@ pub mod configs;
 
 extern crate alloc;
 use alloc::vec::Vec;
+use frame_support::parameter_types;
 use sp_runtime::{
 	generic, impl_opaque_keys,
 	traits::{BlakeTwo256, IdentifyAccount, Verify},
@@ -204,6 +205,21 @@ impl pallet_qutxo::Config for Runtime {
 	type MaxTxOutputs = QutxoMaxTxOutputs;
 }
 
+parameter_types! {
+	pub const ZkGuestImageId: [u8; 32] = [
+		0xf7, 0x74, 0xfe, 0x2d, 0x73, 0x2c, 0xa4, 0xeb,
+		0x96, 0x09, 0x35, 0x40, 0x8c, 0xaa, 0x25, 0x30,
+		0x79, 0x31, 0x73, 0x4e, 0x93, 0xbd, 0xe8, 0x92,
+		0xed, 0x43, 0x37, 0xf6, 0xdd, 0x58, 0x71, 0x62,
+	];
+}
+
+impl pallet_zk_verifier::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type GuestImageId = ZkGuestImageId;
+}
+
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 #[frame_support::runtime]
 mod runtime {
@@ -250,4 +266,9 @@ mod runtime {
 	// The Calibre Q-UTXO Engine
 	#[runtime::pallet_index(8)]
 	pub type Qutxo = pallet_qutxo;
+
+	// ZK proof verifier (host-side verification)
+	#[runtime::pallet_index(9)]
+	pub type ZkVerifier = pallet_zk_verifier;
+
 }

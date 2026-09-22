@@ -1,0 +1,25 @@
+[package]
+name = "pallet-zk-verifier"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+parity-scale-codec = { workspace = true }
+scale-info = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-core = { workspace = true }
+sp-std = { workspace = true }
+calibre-risc0-host = { path = "../../crates/calibre-risc0-host", default-features = false }
+
+[features]
+default = ["std"]
+std = [
+    "parity-scale-codec/std",
+    "scale-info/std",
+    "frame-support/std",
+    "frame-system/std",
+    "sp-core/std",
+    "sp-std/std",
+    "calibre-risc0-host/std",
+]

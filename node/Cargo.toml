@@ -25,6 +25,7 @@ frame-system.workspace = true
 futures = { features = ["thread-pool"], workspace = true }
 jsonrpsee = { features = ["server"], workspace = true }
 calibre-primitives = { workspace = true, default-features = false }
+calibre-risc0-host = { path = "../crates/calibre-risc0-host", default-features = false }
 calibre-qutxo-rpc-api = { workspace = true, default-features = false }
 pallet-transaction-payment-rpc.default-features = true
 pallet-transaction-payment-rpc.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "calibre-risc0-host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sp-runtime-interface = { version = "29.0.1", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+risc0-verifier = { git = "https://github.com/HorizenLabs/risc0-verifier.git", tag = "v0.11.0" }
+ciborium = "0.2"
+
+[features]
+default = ["std"]
+std = ["sp-runtime-interface/std"]
