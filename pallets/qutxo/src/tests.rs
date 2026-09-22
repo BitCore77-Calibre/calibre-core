@@ -247,3 +247,153 @@ fn inclusion_proof_missing_utxo_is_none() {
         assert!(Qutxo::get_inclusion_proof(H256::from([42u8; 32])).is_none());
     });
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// ANTI-SPAM: validate_unsigned tests
+//
+// These exercise the pool-admission path added in the anti-spam
+// patch. The goal is to prove junk txs are rejected before they
+// can occupy the mempool or force expensive ML-DSA verification
+// in the block producer. None of these tests need a valid ML-DSA
+// signature, so the mock_witness() helper (which is deliberately
+// invalid) is fine.
+// ─────────────────────────────────────────────────────────────
+
+use sp_runtime::transaction_validity::{
+    InvalidTransaction, TransactionSource, TransactionValidity, TransactionValidityError,
+};
+use sp_runtime::traits::ValidateUnsigned as _;
+
+fn assert_invalid(res: TransactionValidity, expected: InvalidTransaction) {
+    match res {
+        Err(TransactionValidityError::Invalid(e)) => {
+            assert_eq!(e, expected, "wrong invalid reason")
+        }
+        Ok(v) => panic!("expected Invalid({:?}), got Ok({:?})", expected, v),
+        Err(TransactionValidityError::Unknown(u)) => {
+            panic!("expected Invalid({:?}), got Unknown({:?})", expected, u)
+        }
+    }
+}
+
+fn run_validate_unsigned(tx: Transaction<u128>) -> TransactionValidity {
+    let call: crate::Call<Test> = crate::Call::execute_utxo_tx { tx };
+    crate::Pallet::<Test>::validate_unsigned(TransactionSource::External, &call)
+}
+
+fn one_input(tx_hash: H256, output_index: u32) -> Vec<TransactionInput> {
+    vec![TransactionInput { tx_hash, output_index }]
+}
+
+fn dummy_tx(witness: Vec<u8>, inputs: Vec<TransactionInput>) -> Transaction<u128> {
+    Transaction {
+        inputs,
+        outputs: vec![TransactionOutput { value: 1, lock: QuantumLock::SingleSig([9u8; 32]) }],
+        pq_signature: vec![],
+        witness,
+    }
+}
+
+#[test]
+fn validate_unsigned_rejects_empty_witness() {
+    new_test_ext().execute_with(|| {
+        let tx = dummy_tx(vec![], one_input(H256::from([1u8; 32]), 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_oversized_witness() {
+    new_test_ext().execute_with(|| {
+        let tx = dummy_tx(vec![0u8; 16 * 1024], one_input(H256::from([1u8; 32]), 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_empty_inputs() {
+    new_test_ext().execute_with(|| {
+        let tx = dummy_tx(mock_witness(), vec![]);
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::ExhaustsResources);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_too_many_inputs() {
+    new_test_ext().execute_with(|| {
+        // MaxTxInputs = 16; 17 inputs must be rejected before any storage read.
+        let inputs: Vec<_> = (0..17u8)
+            .map(|i| TransactionInput { tx_hash: H256::from([i; 32]), output_index: 0 })
+            .collect();
+        let tx = dummy_tx(mock_witness(), inputs);
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::ExhaustsResources);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_duplicate_inputs() {
+    new_test_ext().execute_with(|| {
+        let h = H256::from([7u8; 32]);
+        let inputs = vec![
+            TransactionInput { tx_hash: h, output_index: 0 },
+            TransactionInput { tx_hash: h, output_index: 0 },
+        ];
+        let tx = dummy_tx(mock_witness(), inputs);
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_stale_utxo() {
+    new_test_ext().execute_with(|| {
+        // No UTXO inserted; first-input lookup must fail Stale.
+        let tx = dummy_tx(mock_witness(), one_input(H256::from([1u8; 32]), 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::Stale);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_non_aegis_lock() {
+    new_test_ext().execute_with(|| {
+        let tx_hash = H256::from([1u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+        UtxoSet::<Test>::insert(
+            utxo_id,
+            Utxo { value: 100, lock: QuantumLock::SingleSig([0u8; 32]) },
+        );
+        let tx = dummy_tx(mock_witness(), one_input(tx_hash, 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_corrupt_witness_encoding() {
+    new_test_ext().execute_with(|| {
+        let tx_hash = H256::from([1u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+        UtxoSet::<Test>::insert(
+            utxo_id,
+            Utxo { value: 100, lock: QuantumLock::AegisThreshold([0u8; 32]) },
+        );
+        // Compact mode 0b11 prefix declares a 4-byte length, but only 3 bytes
+        // follow -> SCALE decode must fail -> BadProof.
+        let tx = dummy_tx(vec![0xff, 0xff, 0xff, 0xff], one_input(tx_hash, 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn validate_unsigned_rejects_empty_pub_keys() {
+    new_test_ext().execute_with(|| {
+        let tx_hash = H256::from([1u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+        UtxoSet::<Test>::insert(
+            utxo_id,
+            Utxo { value: 100, lock: QuantumLock::AegisThreshold([0u8; 32]) },
+        );
+        // mock_witness decodes cleanly but has zero pub_keys -> InsufficientShares -> BadProof.
+        let tx = dummy_tx(mock_witness(), one_input(tx_hash, 0));
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}

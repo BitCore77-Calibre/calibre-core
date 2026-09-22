@@ -193,19 +193,86 @@ pub mod pallet {
     #[pallet::validate_unsigned]
     impl<T: Config> ValidateUnsigned for Pallet<T> {
         type Call = Call<T>;
+
         fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
-            if let Call::execute_utxo_tx { tx } = call {
-                let mut builder = ValidTransaction::with_tag_prefix("QUTXO").priority(100).longevity(64).propagate(true);
-                for input in tx.inputs.iter() {
-                    let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
-                    let utxo = UtxoSet::<T>::get(&id).ok_or(InvalidTransaction::Stale)?;
-                    if !matches!(utxo.lock, calibre_primitives::QuantumLock::AegisThreshold(_)) {
+            let Call::execute_utxo_tx { tx } = call else {
+                return InvalidTransaction::Call.into();
+            };
+
+            // ── BOUNDED-SIZE CHECKS (cheapest, run first) ──
+            // Reject oversized inputs before any allocation / iteration.
+            if tx.inputs.is_empty() || tx.inputs.len() > T::MaxTxInputs::get() as usize {
+                return InvalidTransaction::ExhaustsResources.into();
+            }
+            if tx.outputs.len() > T::MaxTxOutputs::get() as usize {
+                return InvalidTransaction::ExhaustsResources.into();
+            }
+            // ML-DSA-44 signature ≈ 2.4 KB, pubkey ≈ 1.3 KB → 8 KB is generous.
+            const MAX_WITNESS_BYTES: usize = 8 * 1024;
+            if tx.witness.is_empty() || tx.witness.len() > MAX_WITNESS_BYTES {
+                return InvalidTransaction::BadProof.into();
+            }
+
+            // ── INTRA-TX DUPLICATE INPUT DETECTION ──
+            // Same UTXO listed twice would pass the pool's per-UTXO dedup but
+            // double-count value at dispatch. O(n²) is fine: n ≤ MaxTxInputs.
+            for i in 0..tx.inputs.len() {
+                for j in (i + 1)..tx.inputs.len() {
+                    if tx.inputs[i].tx_hash == tx.inputs[j].tx_hash
+                        && tx.inputs[i].output_index == tx.inputs[j].output_index
+                    {
                         return InvalidTransaction::BadProof.into();
                     }
-                    builder = builder.and_provides(id.as_ref().to_vec());
                 }
-                builder.build()
-            } else { InvalidTransaction::Call.into() }
+            }
+
+            // ── UTXO EXISTENCE + LOCK-TYPE CHECK ──
+            let first_id = Self::calculate_utxo_hash(
+                tx.inputs[0].tx_hash,
+                tx.inputs[0].output_index,
+            );
+            let first_utxo = UtxoSet::<T>::get(&first_id).ok_or(InvalidTransaction::Stale)?;
+            if !matches!(first_utxo.lock, QuantumLock::AegisThreshold(_)) {
+                return InvalidTransaction::BadProof.into();
+            }
+            for input in tx.inputs.iter().skip(1) {
+                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
+                if UtxoSet::<T>::get(&id).is_none() {
+                    return InvalidTransaction::Stale.into();
+                }
+            }
+
+            // ── FULL POST-QUANTUM VERIFICATION ──
+            // Mirror execute_utxo_tx: verify against the first input's lock.
+            // Invalid signatures never enter the pool, so a flood of junk
+            // costs the attacker one ML-DSA verify per attempt — they pay
+            // it, not the block producer.
+            let witness: AegisWitness = match Decode::decode(&mut &tx.witness[..]) {
+                Ok(w) => w,
+                Err(_) => return InvalidTransaction::BadProof.into(),
+            };
+            let payload = (tx.inputs.clone(), tx.outputs.clone()).encode();
+            if calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
+                &first_utxo.lock,
+                &payload,
+                &witness,
+            )
+            .is_err()
+            {
+                return InvalidTransaction::BadProof.into();
+            }
+
+            // ── PROVIDES (pool dedup per UTXO) ──
+            let mut builder = ValidTransaction::with_tag_prefix("QUTXO")
+                .priority(100)
+                .longevity(64)
+                .propagate(true);
+            for input in tx.inputs.iter() {
+                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
+                builder = builder.and_provides(id.as_ref().to_vec());
+            }
+            builder.build()
         }
     }
 }
+
