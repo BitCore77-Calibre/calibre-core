@@ -3,12 +3,21 @@ name = "calibre-light"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "lib"]
+
 [dependencies]
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 calibre-merkle = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+uniffi = { version = "0.28", features = ["tokio", "cli"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"

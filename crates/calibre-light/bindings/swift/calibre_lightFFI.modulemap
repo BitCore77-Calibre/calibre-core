@@ -1,0 +1,4 @@
+module calibre_lightFFI {
+    header "calibre_lightFFI.h"
+    export *
+}

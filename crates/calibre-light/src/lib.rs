@@ -1,39 +1,39 @@
-//! Calibre light client v0.1 — trust tier 1, async.
+//! Calibre light client — trust tier 1, async, UniFFI-exported.
 //!
 //! Trust model: trust the node for "what is the current UTXO root," but
 //! verify every inclusion proof locally against that root with
 //! `calibre-merkle`. An adversarial node cannot forge a UTXO: it would
 //! need a Merkle path folding to a root we've seen, infeasible without
 //! breaking blake2b.
-//!
-//! Tier 2 (verify root against the state trie) is not implemented.
 
 mod error;
 mod rpc;
 mod root_tracker;
 
 pub use error::LightError;
-pub use root_tracker::RootTracker;
 
-use calibre_merkle::{inner_hash, leaf_hash, Hash};
+use calibre_merkle::{inner_hash, leaf_hash};
 use rpc::RpcClient;
+use std::sync::Mutex;
 
-/// twox128("Qutxo") ++ twox128("UtxoSetRoot").
+pub(crate) type Hash = [u8; 32];
+
 const UTXO_SET_ROOT_KEY: &str =
     "0x8feb94cbd57b65eb1436ba6db973e04df4b8d3c19af7d55511d730e48dc7dc87";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct UtxoInfo {
-    pub utxo_id: Hash,
-    pub value_hash: Hash,
-    pub root: Hash,
-    pub path_len: usize,
+    pub utxo_id: Vec<u8>,
+    pub value_hash: Vec<u8>,
+    pub root: Vec<u8>,
+    pub path_len: u32,
 }
 
+#[derive(uniffi::Object)]
 pub struct LightClient {
     rpc: RpcClient,
-    roots: RootTracker,
-    current_root: Option<Hash>,
+    roots: Mutex<root_tracker::RootTracker>,
+    current_root: Mutex<Option<Hash>>,
 }
 
 fn parse_hash(s: &str) -> Result<Hash, LightError> {
@@ -49,23 +49,34 @@ fn parse_hash(s: &str) -> Result<Hash, LightError> {
     Ok(out)
 }
 
-pub fn hash_hex(h: &Hash) -> String {
+pub(crate) fn hash_hex(h: &Hash) -> String {
     let mut s = String::with_capacity(66);
     s.push_str("0x");
     for b in h { s.push_str(&format!("{:02x}", b)); }
     s
 }
 
+fn vec_to_hash(v: &[u8]) -> Result<Hash, LightError> {
+    if v.len() != 32 {
+        return Err(LightError::Hex(format!("expected 32 bytes, got {}", v.len())));
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(v);
+    Ok(out)
+}
+
+#[uniffi::export(async_runtime = "tokio")]
 impl LightClient {
-    pub fn connect(rpc_url: impl Into<String>) -> Self {
-        Self {
+    #[uniffi::constructor]
+    pub fn connect(rpc_url: String) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self {
             rpc: RpcClient::new(rpc_url),
-            roots: RootTracker::new(16),
-            current_root: None,
-        }
+            roots: Mutex::new(root_tracker::RootTracker::new(16)),
+            current_root: Mutex::new(None),
+        })
     }
 
-    pub async fn sync(&mut self) -> Result<Hash, LightError> {
+    pub async fn sync(&self) -> Result<Vec<u8>, LightError> {
         let resp = self
             .rpc
             .call("state_getStorage", serde_json::json!([UTXO_SET_ROOT_KEY, null]))
@@ -74,33 +85,45 @@ impl LightClient {
             .as_str()
             .ok_or_else(|| LightError::Parse("storage root not a string".into()))?;
         let root = parse_hash(root_hex)?;
-        self.roots.push(root);
-        self.current_root = Some(root);
-        Ok(root)
+
+        {
+            let mut roots = self.roots.lock().unwrap();
+            roots.push(root);
+        }
+        {
+            let mut cur = self.current_root.lock().unwrap();
+            *cur = Some(root);
+        }
+        Ok(root.to_vec())
     }
 
-    pub async fn utxo(&self, utxo_id: Hash) -> Result<Option<UtxoInfo>, LightError> {
+    pub async fn utxo(&self, utxo_id: Vec<u8>) -> Result<Option<UtxoInfo>, LightError> {
+        let id = vec_to_hash(&utxo_id)?;
+
         let resp = self
             .rpc
             .call(
                 "qutxo_getInclusionProof",
-                serde_json::json!([hash_hex(&utxo_id), null]),
+                serde_json::json!([hash_hex(&id), null]),
             )
             .await?;
         if resp.is_null() { return Ok(None); }
 
         let root = parse_hash(resp["root"].as_str()
             .ok_or_else(|| LightError::Parse("root".into()))?)?;
-        let id = parse_hash(resp["utxo_id"].as_str()
+        let rid = parse_hash(resp["utxo_id"].as_str()
             .ok_or_else(|| LightError::Parse("utxo_id".into()))?)?;
         let vh = parse_hash(resp["value_hash"].as_str()
             .ok_or_else(|| LightError::Parse("value_hash".into()))?)?;
 
-        if !self.roots.contains(&root) {
-            return Err(LightError::UnknownRoot);
+        {
+            let roots = self.roots.lock().unwrap();
+            if !roots.contains(&root) {
+                return Err(LightError::UnknownRoot);
+            }
         }
 
-        let mut cur = leaf_hash(&id, &vh);
+        let mut cur = leaf_hash(&rid, &vh);
         let path = resp["path"].as_array()
             .ok_or_else(|| LightError::Parse("path".into()))?;
         for step in path {
@@ -116,13 +139,20 @@ impl LightClient {
         }
 
         Ok(Some(UtxoInfo {
-            utxo_id: id,
-            value_hash: vh,
-            root,
-            path_len: path.len(),
+            utxo_id: rid.to_vec(),
+            value_hash: vh.to_vec(),
+            root: root.to_vec(),
+            path_len: path.len() as u32,
         }))
     }
 
-    pub fn current_root(&self) -> Option<Hash> { self.current_root }
-    pub fn known_roots(&self) -> usize { self.roots.len() }
+    pub fn current_root(&self) -> Option<Vec<u8>> {
+        self.current_root.lock().unwrap().map(|h| h.to_vec())
+    }
+
+    pub fn known_roots(&self) -> u32 {
+        self.roots.lock().unwrap().len() as u32
+    }
 }
+
+uniffi::setup_scaffolding!();

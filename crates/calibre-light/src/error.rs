@@ -1,9 +1,9 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, uniffi::Error)]
 pub enum LightError {
     #[error("rpc transport: {0}")]
-    Transport(#[from] reqwest::Error),
+    Transport(String),
     #[error("rpc error {code}: {message}")]
     Rpc { code: i64, message: String },
     #[error("malformed response: {0}")]

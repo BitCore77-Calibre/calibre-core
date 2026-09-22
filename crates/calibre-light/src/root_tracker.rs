@@ -1,4 +1,4 @@
-use calibre_merkle::Hash;
+use crate::Hash;
 use std::collections::VecDeque;
 
 pub struct RootTracker {
@@ -21,6 +21,5 @@ impl RootTracker {
         self.buf.iter().any(|r| r == root)
     }
 
-    pub fn latest(&self) -> Option<Hash> { self.buf.back().copied() }
     pub fn len(&self) -> usize { self.buf.len() }
 }

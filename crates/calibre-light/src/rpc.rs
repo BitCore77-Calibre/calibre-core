@@ -1,6 +1,7 @@
 use crate::error::LightError;
 use serde_json::json;
 
+#[derive(Clone)]
 pub struct RpcClient {
     url: String,
     http: reqwest::Client,
@@ -25,9 +26,11 @@ impl RpcClient {
             .post(&self.url)
             .json(&body)
             .send()
-            .await?
+            .await
+            .map_err(|e| LightError::Transport(e.to_string()))?
             .json()
-            .await?;
+            .await
+            .map_err(|e| LightError::Transport(e.to_string()))?;
         if let Some(err) = resp.get("error") {
             let code = err.get("code").and_then(|v| v.as_i64()).unwrap_or(-1);
             let message = err
