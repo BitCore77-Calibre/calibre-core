@@ -735,6 +735,12 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -766,6 +772,12 @@ internal interface UniffiLib : Library {
     ): Int
     fun uniffi_calibre_light_fn_method_lightclient_last_block(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_calibre_light_fn_method_lightclient_last_verified_block_number(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_calibre_light_fn_method_lightclient_max_proof_age(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    fun uniffi_calibre_light_fn_method_lightclient_set_max_proof_age(`ptr`: Pointer,`blocks`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_calibre_light_fn_method_lightclient_sync(`ptr`: Pointer,
     ): Long
     fun uniffi_calibre_light_fn_method_lightclient_sync_verified(`ptr`: Pointer,
@@ -890,6 +902,12 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_last_block(
     ): Short
+    fun uniffi_calibre_light_checksum_method_lightclient_last_verified_block_number(
+    ): Short
+    fun uniffi_calibre_light_checksum_method_lightclient_max_proof_age(
+    ): Short
+    fun uniffi_calibre_light_checksum_method_lightclient_set_max_proof_age(
+    ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_sync(
     ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_sync_verified(
@@ -924,10 +942,19 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_calibre_light_checksum_method_lightclient_last_block() != 8632.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync() != 43643.toShort()) {
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_last_verified_block_number() != 65108.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 47612.toShort()) {
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_max_proof_age() != 21592.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_set_max_proof_age() != 22095.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync() != 17736.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 54710.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_calibre_light_checksum_method_lightclient_utxo() != 29957.toShort()) {
@@ -1338,15 +1365,28 @@ public interface LightClientInterface {
     
     fun `lastBlock`(): kotlin.ByteArray?
     
+    fun `lastVerifiedBlockNumber`(): kotlin.UInt?
+    
+    fun `maxProofAge`(): kotlin.UInt
+    
+    /**
+     * Override the freshness window for tier-2 proofs.
+     */
+    fun `setMaxProofAge`(`blocks`: kotlin.UInt)
+    
     /**
      * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     * Root is recorded without block metadata; staleness checks do not
+     * apply to tier-1 roots.
      */
     suspend fun `sync`(): kotlin.ByteArray
     
     /**
-     * Trust tier 2: fetch the finalized header, fetch a state proof for
-     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
-     * Returns the root plus the block hash and number it was proved against.
+     * Trust tier 2: verify the UTXO set root against a finalized
+     * block's `state_root`, via a Substrate state-trie proof.
+     *
+     * Rejects if the finalized head moved backwards since the last
+     * successful `sync_verified()`.
      */
     suspend fun `syncVerified`(): SyncResult
     
@@ -1472,9 +1512,49 @@ open class LightClient: Disposable, AutoCloseable, LightClientInterface {
     }
     
 
+    override fun `lastVerifiedBlockNumber`(): kotlin.UInt? {
+            return FfiConverterOptionalUInt.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_calibre_light_fn_method_lightclient_last_verified_block_number(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `maxProofAge`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_calibre_light_fn_method_lightclient_max_proof_age(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Override the freshness window for tier-2 proofs.
+     */override fun `setMaxProofAge`(`blocks`: kotlin.UInt)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_calibre_light_fn_method_lightclient_set_max_proof_age(
+        it, FfiConverterUInt.lower(`blocks`),_status)
+}
+    }
+    
+    
+
     
     /**
      * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     * Root is recorded without block metadata; staleness checks do not
+     * apply to tier-1 roots.
      */
     @Throws(LightException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -1498,9 +1578,11 @@ open class LightClient: Disposable, AutoCloseable, LightClientInterface {
 
     
     /**
-     * Trust tier 2: fetch the finalized header, fetch a state proof for
-     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
-     * Returns the root plus the block hash and number it was proved against.
+     * Trust tier 2: verify the UTXO set root against a finalized
+     * block's `state_root`, via a Substrate state-trie proof.
+     *
+     * Rejects if the finalized head moved backwards since the last
+     * successful `sync_verified()`.
      */
     @Throws(LightException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
@@ -1636,7 +1718,12 @@ data class UtxoInfo (
     var `utxoId`: kotlin.ByteArray, 
     var `valueHash`: kotlin.ByteArray, 
     var `root`: kotlin.ByteArray, 
-    var `pathLen`: kotlin.UInt
+    var `pathLen`: kotlin.UInt, 
+    /**
+     * Age of the proof's root, in blocks, relative to the latest verified
+     * block. `None` if the root was not verified (tier 1).
+     */
+    var `proofAgeBlocks`: kotlin.UInt?
 ) {
     
     companion object
@@ -1652,6 +1739,7 @@ public object FfiConverterTypeUtxoInfo: FfiConverterRustBuffer<UtxoInfo> {
             FfiConverterByteArray.read(buf),
             FfiConverterByteArray.read(buf),
             FfiConverterUInt.read(buf),
+            FfiConverterOptionalUInt.read(buf),
         )
     }
 
@@ -1659,7 +1747,8 @@ public object FfiConverterTypeUtxoInfo: FfiConverterRustBuffer<UtxoInfo> {
             FfiConverterByteArray.allocationSize(value.`utxoId`) +
             FfiConverterByteArray.allocationSize(value.`valueHash`) +
             FfiConverterByteArray.allocationSize(value.`root`) +
-            FfiConverterUInt.allocationSize(value.`pathLen`)
+            FfiConverterUInt.allocationSize(value.`pathLen`) +
+            FfiConverterOptionalUInt.allocationSize(value.`proofAgeBlocks`)
     )
 
     override fun write(value: UtxoInfo, buf: ByteBuffer) {
@@ -1667,6 +1756,7 @@ public object FfiConverterTypeUtxoInfo: FfiConverterRustBuffer<UtxoInfo> {
             FfiConverterByteArray.write(value.`valueHash`, buf)
             FfiConverterByteArray.write(value.`root`, buf)
             FfiConverterUInt.write(value.`pathLen`, buf)
+            FfiConverterOptionalUInt.write(value.`proofAgeBlocks`, buf)
     }
 }
 
@@ -1722,6 +1812,26 @@ sealed class LightException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
     
+    class StaleProof(
+        
+        val `ageBlocks`: kotlin.UInt, 
+        
+        val `maxBlocks`: kotlin.UInt
+        ) : LightException() {
+        override val message
+            get() = "ageBlocks=${ `ageBlocks` }, maxBlocks=${ `maxBlocks` }"
+    }
+    
+    class FinalizedHeadRegressed(
+        
+        val `prev`: kotlin.UInt, 
+        
+        val `now`: kotlin.UInt
+        ) : LightException() {
+        override val message
+            get() = "prev=${ `prev` }, now=${ `now` }"
+    }
+    
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<LightException> {
         override fun lift(error_buf: RustBuffer.ByValue): LightException = FfiConverterTypeLightError.lift(error_buf)
@@ -1752,6 +1862,14 @@ public object FfiConverterTypeLightError : FfiConverterRustBuffer<LightException
             5 -> LightException.BadPath()
             6 -> LightException.Hex(
                 FfiConverterString.read(buf),
+                )
+            7 -> LightException.StaleProof(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                )
+            8 -> LightException.FinalizedHeadRegressed(
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
@@ -1788,6 +1906,18 @@ public object FfiConverterTypeLightError : FfiConverterRustBuffer<LightException
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is LightException.StaleProof -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.`ageBlocks`)
+                + FfiConverterUInt.allocationSize(value.`maxBlocks`)
+            )
+            is LightException.FinalizedHeadRegressed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.`prev`)
+                + FfiConverterUInt.allocationSize(value.`now`)
+            )
         }
     }
 
@@ -1822,9 +1952,53 @@ public object FfiConverterTypeLightError : FfiConverterRustBuffer<LightException
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
+            is LightException.StaleProof -> {
+                buf.putInt(7)
+                FfiConverterUInt.write(value.`ageBlocks`, buf)
+                FfiConverterUInt.write(value.`maxBlocks`, buf)
+                Unit
+            }
+            is LightException.FinalizedHeadRegressed -> {
+                buf.putInt(8)
+                FfiConverterUInt.write(value.`prev`, buf)
+                FfiConverterUInt.write(value.`now`, buf)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalUInt: FfiConverterRustBuffer<kotlin.UInt?> {
+    override fun read(buf: ByteBuffer): kotlin.UInt? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterUInt.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.UInt?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterUInt.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.UInt?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterUInt.write(value, buf)
+        }
+    }
 }
 
 

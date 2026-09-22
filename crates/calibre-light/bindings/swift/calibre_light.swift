@@ -522,15 +522,28 @@ public protocol LightClientProtocol : AnyObject {
     
     func lastBlock()  -> Data?
     
+    func lastVerifiedBlockNumber()  -> UInt32?
+    
+    func maxProofAge()  -> UInt32
+    
+    /**
+     * Override the freshness window for tier-2 proofs.
+     */
+    func setMaxProofAge(blocks: UInt32) 
+    
     /**
      * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     * Root is recorded without block metadata; staleness checks do not
+     * apply to tier-1 roots.
      */
     func sync() async throws  -> Data
     
     /**
-     * Trust tier 2: fetch the finalized header, fetch a state proof for
-     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
-     * Returns the root plus the block hash and number it was proved against.
+     * Trust tier 2: verify the UTXO set root against a finalized
+     * block's `state_root`, via a Substrate state-trie proof.
+     *
+     * Rejects if the finalized head moved backwards since the last
+     * successful `sync_verified()`.
      */
     func syncVerified() async throws  -> SyncResult
     
@@ -617,8 +630,34 @@ open func lastBlock() -> Data? {
 })
 }
     
+open func lastVerifiedBlockNumber() -> UInt32? {
+    return try!  FfiConverterOptionUInt32.lift(try! rustCall() {
+    uniffi_calibre_light_fn_method_lightclient_last_verified_block_number(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+open func maxProofAge() -> UInt32 {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+    uniffi_calibre_light_fn_method_lightclient_max_proof_age(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Override the freshness window for tier-2 proofs.
+     */
+open func setMaxProofAge(blocks: UInt32) {try! rustCall() {
+    uniffi_calibre_light_fn_method_lightclient_set_max_proof_age(self.uniffiClonePointer(),
+        FfiConverterUInt32.lower(blocks),$0
+    )
+}
+}
+    
     /**
      * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     * Root is recorded without block metadata; staleness checks do not
+     * apply to tier-1 roots.
      */
 open func sync()async throws  -> Data {
     return
@@ -638,9 +677,11 @@ open func sync()async throws  -> Data {
 }
     
     /**
-     * Trust tier 2: fetch the finalized header, fetch a state proof for
-     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
-     * Returns the root plus the block hash and number it was proved against.
+     * Trust tier 2: verify the UTXO set root against a finalized
+     * block's `state_root`, via a Substrate state-trie proof.
+     *
+     * Rejects if the finalized head moved backwards since the last
+     * successful `sync_verified()`.
      */
 open func syncVerified()async throws  -> SyncResult {
     return
@@ -818,14 +859,24 @@ public struct UtxoInfo {
     public var valueHash: Data
     public var root: Data
     public var pathLen: UInt32
+    /**
+     * Age of the proof's root, in blocks, relative to the latest verified
+     * block. `None` if the root was not verified (tier 1).
+     */
+    public var proofAgeBlocks: UInt32?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(utxoId: Data, valueHash: Data, root: Data, pathLen: UInt32) {
+    public init(utxoId: Data, valueHash: Data, root: Data, pathLen: UInt32, 
+        /**
+         * Age of the proof's root, in blocks, relative to the latest verified
+         * block. `None` if the root was not verified (tier 1).
+         */proofAgeBlocks: UInt32?) {
         self.utxoId = utxoId
         self.valueHash = valueHash
         self.root = root
         self.pathLen = pathLen
+        self.proofAgeBlocks = proofAgeBlocks
     }
 }
 
@@ -845,6 +896,9 @@ extension UtxoInfo: Equatable, Hashable {
         if lhs.pathLen != rhs.pathLen {
             return false
         }
+        if lhs.proofAgeBlocks != rhs.proofAgeBlocks {
+            return false
+        }
         return true
     }
 
@@ -853,6 +907,7 @@ extension UtxoInfo: Equatable, Hashable {
         hasher.combine(valueHash)
         hasher.combine(root)
         hasher.combine(pathLen)
+        hasher.combine(proofAgeBlocks)
     }
 }
 
@@ -867,7 +922,8 @@ public struct FfiConverterTypeUtxoInfo: FfiConverterRustBuffer {
                 utxoId: FfiConverterData.read(from: &buf), 
                 valueHash: FfiConverterData.read(from: &buf), 
                 root: FfiConverterData.read(from: &buf), 
-                pathLen: FfiConverterUInt32.read(from: &buf)
+                pathLen: FfiConverterUInt32.read(from: &buf), 
+                proofAgeBlocks: FfiConverterOptionUInt32.read(from: &buf)
         )
     }
 
@@ -876,6 +932,7 @@ public struct FfiConverterTypeUtxoInfo: FfiConverterRustBuffer {
         FfiConverterData.write(value.valueHash, into: &buf)
         FfiConverterData.write(value.root, into: &buf)
         FfiConverterUInt32.write(value.pathLen, into: &buf)
+        FfiConverterOptionUInt32.write(value.proofAgeBlocks, into: &buf)
     }
 }
 
@@ -909,6 +966,10 @@ public enum LightError {
     case BadPath
     case Hex(String
     )
+    case StaleProof(ageBlocks: UInt32, maxBlocks: UInt32
+    )
+    case FinalizedHeadRegressed(prev: UInt32, now: UInt32
+    )
 }
 
 
@@ -939,6 +1000,14 @@ public struct FfiConverterTypeLightError: FfiConverterRustBuffer {
         case 5: return .BadPath
         case 6: return .Hex(
             try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .StaleProof(
+            ageBlocks: try FfiConverterUInt32.read(from: &buf), 
+            maxBlocks: try FfiConverterUInt32.read(from: &buf)
+            )
+        case 8: return .FinalizedHeadRegressed(
+            prev: try FfiConverterUInt32.read(from: &buf), 
+            now: try FfiConverterUInt32.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -980,6 +1049,18 @@ public struct FfiConverterTypeLightError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
             
+        
+        case let .StaleProof(ageBlocks,maxBlocks):
+            writeInt(&buf, Int32(7))
+            FfiConverterUInt32.write(ageBlocks, into: &buf)
+            FfiConverterUInt32.write(maxBlocks, into: &buf)
+            
+        
+        case let .FinalizedHeadRegressed(prev,now):
+            writeInt(&buf, Int32(8))
+            FfiConverterUInt32.write(prev, into: &buf)
+            FfiConverterUInt32.write(now, into: &buf)
+            
         }
     }
 }
@@ -990,6 +1071,30 @@ extension LightError: Equatable, Hashable {}
 extension LightError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionUInt32: FfiConverterRustBuffer {
+    typealias SwiftType = UInt32?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterUInt32.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterUInt32.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
     }
 }
 
@@ -1111,10 +1216,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_calibre_light_checksum_method_lightclient_last_block() != 8632) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_calibre_light_checksum_method_lightclient_sync() != 43643) {
+    if (uniffi_calibre_light_checksum_method_lightclient_last_verified_block_number() != 65108) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 47612) {
+    if (uniffi_calibre_light_checksum_method_lightclient_max_proof_age() != 21592) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_calibre_light_checksum_method_lightclient_set_max_proof_age() != 22095) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_calibre_light_checksum_method_lightclient_sync() != 17736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 54710) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_calibre_light_checksum_method_lightclient_utxo() != 29957) {
