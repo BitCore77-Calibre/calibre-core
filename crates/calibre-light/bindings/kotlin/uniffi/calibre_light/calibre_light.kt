@@ -731,6 +731,10 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -760,7 +764,11 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_calibre_light_fn_method_lightclient_known_roots(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    fun uniffi_calibre_light_fn_method_lightclient_last_block(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_calibre_light_fn_method_lightclient_sync(`ptr`: Pointer,
+    ): Long
+    fun uniffi_calibre_light_fn_method_lightclient_sync_verified(`ptr`: Pointer,
     ): Long
     fun uniffi_calibre_light_fn_method_lightclient_utxo(`ptr`: Pointer,`utxoId`: RustBuffer.ByValue,
     ): Long
@@ -880,7 +888,11 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_known_roots(
     ): Short
+    fun uniffi_calibre_light_checksum_method_lightclient_last_block(
+    ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_sync(
+    ): Short
+    fun uniffi_calibre_light_checksum_method_lightclient_sync_verified(
     ): Short
     fun uniffi_calibre_light_checksum_method_lightclient_utxo(
     ): Short
@@ -909,7 +921,13 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_calibre_light_checksum_method_lightclient_known_roots() != 3062.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync() != 27945.toShort()) {
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_last_block() != 8632.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync() != 43643.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 47612.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_calibre_light_checksum_method_lightclient_utxo() != 29957.toShort()) {
@@ -1048,6 +1066,29 @@ public object FfiConverterLong: FfiConverter<Long, Long> {
 
     override fun write(value: Long, buf: ByteBuffer) {
         buf.putLong(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterBoolean: FfiConverter<Boolean, Byte> {
+    override fun lift(value: Byte): Boolean {
+        return value.toInt() != 0
+    }
+
+    override fun read(buf: ByteBuffer): Boolean {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: Boolean): Byte {
+        return if (value) 1.toByte() else 0.toByte()
+    }
+
+    override fun allocationSize(value: Boolean) = 1UL
+
+    override fun write(value: Boolean, buf: ByteBuffer) {
+        buf.put(lower(value))
     }
 }
 
@@ -1295,7 +1336,19 @@ public interface LightClientInterface {
     
     fun `knownRoots`(): kotlin.UInt
     
+    fun `lastBlock`(): kotlin.ByteArray?
+    
+    /**
+     * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     */
     suspend fun `sync`(): kotlin.ByteArray
+    
+    /**
+     * Trust tier 2: fetch the finalized header, fetch a state proof for
+     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
+     * Returns the root plus the block hash and number it was proved against.
+     */
+    suspend fun `syncVerified`(): SyncResult
     
     suspend fun `utxo`(`utxoId`: kotlin.ByteArray): UtxoInfo?
     
@@ -1407,7 +1460,22 @@ open class LightClient: Disposable, AutoCloseable, LightClientInterface {
     }
     
 
+    override fun `lastBlock`(): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_calibre_light_fn_method_lightclient_last_block(
+        it, _status)
+}
+    }
+    )
+    }
     
+
+    
+    /**
+     * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     */
     @Throws(LightException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `sync`() : kotlin.ByteArray {
@@ -1423,6 +1491,32 @@ open class LightClient: Disposable, AutoCloseable, LightClientInterface {
         { future -> UniffiLib.INSTANCE.ffi_calibre_light_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterByteArray.lift(it) },
+        // Error FFI converter
+        LightException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Trust tier 2: fetch the finalized header, fetch a state proof for
+     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
+     * Returns the root plus the block hash and number it was proved against.
+     */
+    @Throws(LightException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `syncVerified`() : SyncResult {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_calibre_light_fn_method_lightclient_sync_verified(
+                thisPtr,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_calibre_light_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_calibre_light_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_calibre_light_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeSyncResult.lift(it) },
         // Error FFI converter
         LightException.ErrorHandler,
     )
@@ -1493,6 +1587,46 @@ public object FfiConverterTypeLightClient: FfiConverter<LightClient, Pointer> {
         // The Rust code always expects pointers written as 8 bytes,
         // and will fail to compile if they don't fit.
         buf.putLong(Pointer.nativeValue(lower(value)))
+    }
+}
+
+
+
+data class SyncResult (
+    var `utxoSetRoot`: kotlin.ByteArray, 
+    var `blockHash`: kotlin.ByteArray, 
+    var `blockNumber`: kotlin.UInt, 
+    var `verified`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSyncResult: FfiConverterRustBuffer<SyncResult> {
+    override fun read(buf: ByteBuffer): SyncResult {
+        return SyncResult(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SyncResult) = (
+            FfiConverterByteArray.allocationSize(value.`utxoSetRoot`) +
+            FfiConverterByteArray.allocationSize(value.`blockHash`) +
+            FfiConverterUInt.allocationSize(value.`blockNumber`) +
+            FfiConverterBoolean.allocationSize(value.`verified`)
+    )
+
+    override fun write(value: SyncResult, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`utxoSetRoot`, buf)
+            FfiConverterByteArray.write(value.`blockHash`, buf)
+            FfiConverterUInt.write(value.`blockNumber`, buf)
+            FfiConverterBoolean.write(value.`verified`, buf)
     }
 }
 

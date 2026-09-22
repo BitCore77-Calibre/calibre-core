@@ -276,9 +276,19 @@ RustBuffer uniffi_calibre_light_fn_method_lightclient_current_root(void*_Nonnull
 uint32_t uniffi_calibre_light_fn_method_lightclient_known_roots(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_LAST_BLOCK
+#define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_LAST_BLOCK
+RustBuffer uniffi_calibre_light_fn_method_lightclient_last_block(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_SYNC
 uint64_t uniffi_calibre_light_fn_method_lightclient_sync(void*_Nonnull ptr
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_SYNC_VERIFIED
+#define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_SYNC_VERIFIED
+uint64_t uniffi_calibre_light_fn_method_lightclient_sync_verified(void*_Nonnull ptr
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_FN_METHOD_LIGHTCLIENT_UTXO
@@ -578,9 +588,21 @@ uint16_t uniffi_calibre_light_checksum_method_lightclient_known_roots(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_LAST_BLOCK
+#define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_LAST_BLOCK
+uint16_t uniffi_calibre_light_checksum_method_lightclient_last_block(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_SYNC
 #define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_SYNC
 uint16_t uniffi_calibre_light_checksum_method_lightclient_sync(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_SYNC_VERIFIED
+#define UNIFFI_FFIDEF_UNIFFI_CALIBRE_LIGHT_CHECKSUM_METHOD_LIGHTCLIENT_SYNC_VERIFIED
+uint16_t uniffi_calibre_light_checksum_method_lightclient_sync_verified(void
     
 );
 #endif

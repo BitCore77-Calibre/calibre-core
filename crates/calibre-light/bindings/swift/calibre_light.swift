@@ -431,6 +431,30 @@ fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterBool : FfiConverter {
+    typealias FfiType = Int8
+    typealias SwiftType = Bool
+
+    public static func lift(_ value: Int8) throws -> Bool {
+        return value != 0
+    }
+
+    public static func lower(_ value: Bool) -> Int8 {
+        return value ? 1 : 0
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: Bool, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterString: FfiConverter {
     typealias SwiftType = String
     typealias FfiType = RustBuffer
@@ -496,7 +520,19 @@ public protocol LightClientProtocol : AnyObject {
     
     func knownRoots()  -> UInt32
     
+    func lastBlock()  -> Data?
+    
+    /**
+     * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     */
     func sync() async throws  -> Data
+    
+    /**
+     * Trust tier 2: fetch the finalized header, fetch a state proof for
+     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
+     * Returns the root plus the block hash and number it was proved against.
+     */
+    func syncVerified() async throws  -> SyncResult
     
     func utxo(utxoId: Data) async throws  -> UtxoInfo?
     
@@ -574,6 +610,16 @@ open func knownRoots() -> UInt32 {
 })
 }
     
+open func lastBlock() -> Data? {
+    return try!  FfiConverterOptionData.lift(try! rustCall() {
+    uniffi_calibre_light_fn_method_lightclient_last_block(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Trust tier 1: fetch root via `state_getStorage`, trust the node.
+     */
 open func sync()async throws  -> Data {
     return
         try  await uniffiRustCallAsync(
@@ -587,6 +633,28 @@ open func sync()async throws  -> Data {
             completeFunc: ffi_calibre_light_rust_future_complete_rust_buffer,
             freeFunc: ffi_calibre_light_rust_future_free_rust_buffer,
             liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeLightError.lift
+        )
+}
+    
+    /**
+     * Trust tier 2: fetch the finalized header, fetch a state proof for
+     * `Qutxo.UtxoSetRoot`, verify the proof against `header.state_root`.
+     * Returns the root plus the block hash and number it was proved against.
+     */
+open func syncVerified()async throws  -> SyncResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_calibre_light_fn_method_lightclient_sync_verified(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_calibre_light_rust_future_poll_rust_buffer,
+            completeFunc: ffi_calibre_light_rust_future_complete_rust_buffer,
+            freeFunc: ffi_calibre_light_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSyncResult.lift,
             errorHandler: FfiConverterTypeLightError.lift
         )
 }
@@ -660,6 +728,88 @@ public func FfiConverterTypeLightClient_lift(_ pointer: UnsafeMutableRawPointer)
 #endif
 public func FfiConverterTypeLightClient_lower(_ value: LightClient) -> UnsafeMutableRawPointer {
     return FfiConverterTypeLightClient.lower(value)
+}
+
+
+public struct SyncResult {
+    public var utxoSetRoot: Data
+    public var blockHash: Data
+    public var blockNumber: UInt32
+    public var verified: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(utxoSetRoot: Data, blockHash: Data, blockNumber: UInt32, verified: Bool) {
+        self.utxoSetRoot = utxoSetRoot
+        self.blockHash = blockHash
+        self.blockNumber = blockNumber
+        self.verified = verified
+    }
+}
+
+
+
+extension SyncResult: Equatable, Hashable {
+    public static func ==(lhs: SyncResult, rhs: SyncResult) -> Bool {
+        if lhs.utxoSetRoot != rhs.utxoSetRoot {
+            return false
+        }
+        if lhs.blockHash != rhs.blockHash {
+            return false
+        }
+        if lhs.blockNumber != rhs.blockNumber {
+            return false
+        }
+        if lhs.verified != rhs.verified {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(utxoSetRoot)
+        hasher.combine(blockHash)
+        hasher.combine(blockNumber)
+        hasher.combine(verified)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSyncResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SyncResult {
+        return
+            try SyncResult(
+                utxoSetRoot: FfiConverterData.read(from: &buf), 
+                blockHash: FfiConverterData.read(from: &buf), 
+                blockNumber: FfiConverterUInt32.read(from: &buf), 
+                verified: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SyncResult, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.utxoSetRoot, into: &buf)
+        FfiConverterData.write(value.blockHash, into: &buf)
+        FfiConverterUInt32.write(value.blockNumber, into: &buf)
+        FfiConverterBool.write(value.verified, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncResult_lift(_ buf: RustBuffer) throws -> SyncResult {
+    return try FfiConverterTypeSyncResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSyncResult_lower(_ value: SyncResult) -> RustBuffer {
+    return FfiConverterTypeSyncResult.lower(value)
 }
 
 
@@ -958,7 +1108,13 @@ private var initializationResult: InitializationResult = {
     if (uniffi_calibre_light_checksum_method_lightclient_known_roots() != 3062) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_calibre_light_checksum_method_lightclient_sync() != 27945) {
+    if (uniffi_calibre_light_checksum_method_lightclient_last_block() != 8632) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_calibre_light_checksum_method_lightclient_sync() != 43643) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_calibre_light_checksum_method_lightclient_sync_verified() != 47612) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_calibre_light_checksum_method_lightclient_utxo() != 29957) {
