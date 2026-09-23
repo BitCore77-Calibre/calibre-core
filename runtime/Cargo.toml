@@ -25,6 +25,7 @@ frame-try-runtime = { optional = true, workspace = true }
 pallet-aura.workspace = true
 pallet-balances.workspace = true
 pallet-grandpa.workspace = true
+pallet-session.workspace = true
 pallet-sudo.workspace = true
 pallet-template.workspace = true
 pallet-qutxo.workspace = true
@@ -71,6 +72,7 @@ std = [
 	"pallet-aura/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
+	"pallet-session/std",
 	"pallet-sudo/std",
 	"pallet-template/std",
 		"pallet-qutxo/std",
@@ -123,6 +125,7 @@ try-runtime = [
 	"pallet-aura/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",
+	"pallet-session/try-runtime",
 	"pallet-sudo/try-runtime",
 	"pallet-template/try-runtime",
 	"pallet-timestamp/try-runtime",

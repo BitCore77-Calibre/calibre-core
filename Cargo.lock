@@ -11208,6 +11208,7 @@ dependencies = [
  "pallet-calibre-fees",
  "pallet-grandpa",
  "pallet-qutxo",
+ "pallet-session",
  "pallet-stake",
  "pallet-sudo",
  "pallet-template",

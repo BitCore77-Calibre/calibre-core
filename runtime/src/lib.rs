@@ -278,6 +278,10 @@ mod runtime {
 	#[runtime::pallet_index(10)]
 	pub type CalibreFees = pallet_calibre_fees;
 
+	// Session management — key rotation and validator set updates
+	#[runtime::pallet_index(12)]
+	pub type Session = pallet_session;
+
 	// Staking — bond / unbond into a pallet-internal ledger
 	#[runtime::pallet_index(11)]
 	pub type Stake = pallet_stake;

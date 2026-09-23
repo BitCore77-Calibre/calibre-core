@@ -42,7 +42,7 @@ use sp_version::RuntimeVersion;
 use super::{
 	AccountId, Aura, Balance, Balances, Block, BlockNumber, Hash, Nonce, PalletInfo, Runtime,
 	RuntimeCall, RuntimeEvent, RuntimeFreezeReason, RuntimeHoldReason, RuntimeOrigin, RuntimeTask,
-	System, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
+	SessionKeys, System, EXISTENTIAL_DEPOSIT, SLOT_DURATION, VERSION,
 };
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
@@ -308,4 +308,38 @@ impl pallet_calibre_fees::Config for Runtime {
 	type FindAuthor = AuraFindAuthor;
 	type FeeMinter = crate::Qutxo;
 	type WeightInfo = pallet_calibre_fees::weights::SubstrateWeight<Runtime>;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Session pallet — key rotation and validator set updates
+// ─────────────────────────────────────────────────────────────
+//
+// Phase 9.2: pallet-session is wired but the authority set does not
+// rotate yet. `SessionManager = ()` returns `None` from new_session,
+// which means "keep the same set". Session *keys* are registered and
+// rotate at session boundaries; the set itself stays genesis-frozen
+// until Phase 9.3 (epochs) and 9.5 (stake-weighted election).
+//
+// Session length: 600 blocks = 1 hour at 6s block time.
+
+parameter_types! {
+	pub const SessionPeriod: BlockNumber = 600;
+	pub const SessionOffset: BlockNumber = 0;
+}
+
+impl pallet_session::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type ValidatorId = AccountId;
+	type ValidatorIdOf = sp_runtime::traits::ConvertInto;
+	type ShouldEndSession = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
+	type NextSessionRotation = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
+	// No election yet. Same set persists; only session keys rotate.
+	type SessionManager = ();
+	// Aura + GRANDPA both implement SessionHandler for their key types.
+	type SessionHandler =
+		<SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = SessionKeys;
+	// No validators are disabled in this phase.
+	type DisablingStrategy = ();
+	type WeightInfo = ();
 }
