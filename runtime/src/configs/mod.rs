@@ -218,6 +218,15 @@ impl frame_support::traits::FindAuthor<AccountId> for AuraFindAuthor {
     }
 }
 
+impl pallet_stake::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Balance = Balance;
+	type MaxBondInputs = ConstU32<16>;
+	type UtxoConsumer = crate::Qutxo;
+	type UtxoMinter = crate::Qutxo;
+	type WeightInfo = pallet_stake::weights::SubstrateWeight<Runtime>;
+}
+
 impl pallet_calibre_fees::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;

@@ -70,6 +70,26 @@ pub trait FeeMinter<Balance, Lock> {
     fn mint_to_lock(value: Balance, lock: Lock);
 }
 
+/// Consume UTXOs (verify witness, remove from set, decrement TotalIssuance).
+/// Implemented by pallet-qutxo; used by pallet-stake to burn user funds into
+/// the staking ledger.
+pub trait UtxoConsumer<Balance> {
+    /// Verify the AEGIS witness against the first input's lock, then remove
+    /// every input from the UTXO set. Returns the total consumed value, or
+    /// `None` if any input is missing or the witness fails verification.
+    /// On success, decrements `TotalIssuance` by the consumed amount.
+    fn consume_with_witness(
+        inputs: &[TransactionInput],
+        witness: &[u8],
+    ) -> Option<Balance>;
+}
+
+impl<Balance: Default + Copy> UtxoConsumer<Balance> for () {
+    fn consume_with_witness(_inputs: &[TransactionInput], _witness: &[u8]) -> Option<Balance> {
+        Some(Balance::default())
+    }
+}
+
 impl<Balance, Lock> FeeMinter<Balance, Lock> for () {
     fn mint_to_lock(_value: Balance, _lock: Lock) {}
 }

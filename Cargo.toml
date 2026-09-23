@@ -36,6 +36,7 @@ resolver = "2"
     calibre-qutxo-rpc-api = { path = "crates/qutxo-rpc-api", default-features = false }
     pallet-qutxo = { path = "pallets/qutxo", default-features = false }
 pallet-calibre-fees = { path = "pallets/calibre-fees", default-features = false }
+pallet-stake = { path = "pallets/stake", default-features = false }
     pallet-zk-verifier = { path = "pallets/zk-verifier", default-features = false }
     
 solochain-template-runtime = { path = "./runtime", default-features = false }

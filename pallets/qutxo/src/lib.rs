@@ -353,3 +353,51 @@ impl<T: pallet::Config> calibre_primitives::FeeMinter<T::Balance, [u8; 32]> for 
         let _ = Self::mint_utxo(value, lock);
     }
 }
+
+impl<T: pallet::Config> calibre_primitives::UtxoConsumer<T::Balance> for pallet::Pallet<T> {
+    fn consume_with_witness(
+        inputs: &[calibre_primitives::TransactionInput],
+        witness_bytes: &[u8],
+    ) -> Option<T::Balance> {
+        use parity_scale_codec::{Decode, Encode};
+        use sp_runtime::Saturating;
+        use sp_std::vec::Vec;
+
+        if inputs.is_empty() {
+            return None;
+        }
+        let witness: calibre_aegis_crypto::AegisWitness =
+            Decode::decode(&mut &witness_bytes[..]).ok()?;
+
+        let first_hash = pallet::Pallet::<T>::calculate_utxo_hash(
+            inputs[0].tx_hash,
+            inputs[0].output_index,
+        );
+        let first_lock = pallet::UtxoSet::<T>::get(first_hash)?.lock;
+
+        // Stake bond signs (inputs, []) — no outputs.
+        let payload = (
+            inputs.to_vec(),
+            Vec::<calibre_primitives::TransactionOutput<T::Balance>>::new(),
+        );
+        calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
+            &first_lock,
+            &payload.encode(),
+            &witness,
+        )
+        .ok()?;
+
+        let mut total = T::Balance::default();
+        for input in inputs {
+            let h = pallet::Pallet::<T>::calculate_utxo_hash(input.tx_hash, input.output_index);
+            let utxo = pallet::UtxoSet::<T>::get(h)?;
+            total = total.saturating_add(utxo.value);
+            pallet::UtxoSet::<T>::remove(h);
+        }
+        pallet::Pallet::<T>::mark_utxo_set_dirty();
+
+        let current = pallet::TotalIssuance::<T>::get();
+        pallet::TotalIssuance::<T>::put(current.saturating_sub(total));
+        Some(total)
+    }
+}

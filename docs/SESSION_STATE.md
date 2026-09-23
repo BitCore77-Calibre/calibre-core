@@ -1,152 +1,74 @@
-# Calibre Session State — d7d61fe2
+# Calibre Session State
 
-See the SESSION HANDOFF document in the chat history (or the commit messages
-since 28498766) for the full picture.
+## Where we are
 
-# Calibre Session State — f2e6c4b7
+- **Commit:** `16da3d67` (local, not pushed — `origin/main` at `4e65e6f0`)
+- **Phase:** 8.6 complete. Next: 8.7 (stake pallet).
+- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> 54 passed, 1 ignored (pre-existing Phase 5 regression).
 
-Three commits ahead of origin/main. Push before next session if you want
-a backup; nothing depends on it locally.
+## Locked this session
 
-## Just shipped (this session, f8e9e23d -> f2e6c4b7)
+### Economic (unchanged from prior sessions)
+- 777M genesis, 5.3 CAL/block, 4y halving, 1B cap.
+- Self-funded bootstrap (EUR 13.5K, no VC raise pre-product).
+- Fee split 50/30/20, reward split 70/30, priority fee 100% producer.
+- Dynamic base fee EIP-1559-style (12% change, 500-1M range).
 
-### Anti-spam for execute_utxo_tx  (4e6c0abe)
-`validate_unsigned` now does full ML-DSA-44 verification plus bounded-
-size, duplicate-input, lock-type, and UTXO-existence pre-checks. Junk
-txs are rejected at pool admission, not by the block producer. 9 new
-tests in pallets/qutxo/src/tests.rs; 17/17 pallet suite green.
+### Phase 8.6 design (Q1/Q2)
+- **Q1 = once per block.** Producer payouts settle in `on_finalize`, batched, not per-tx. Matches existing `adjust_base_fee` / `distribute_block_reward` cadence. One UTXO per producer per block.
+- **Q2(a) = leave pending, never burn.** Unregistered producers accrue in `ProducerPending[account]`; mint happens on a later block once `register_producer_lock` is called. Follows Ethereum 0x00-credential + Cosmos outstanding-commission precedent.
+- Author resolution via a `FindAuthor` config type (`AuraFindAuthor` at runtime), **not** a `pallet-authorship` dependency. If other pallets later want `Authorship::author()`, add pallet-authorship on top of the same struct — 4-line follow-up.
 
-### Honest weights  (f8e9e23d)
-New pallets/qutxo/src/weights.rs: WeightInfo trait + hand-derived
-constants from measured ML-DSA-44 cost (208us) + RocksDbWeight, scaling
-with inputs/outputs. Closes second DoS vector (weight understatement).
-Marked for regeneration via frame-benchmarking once the pallet API is
-frozen.
+### Phase 8.7 design (Q3/Q4)
+- **Q3 = option (i), burn-and-record.** Bond consumes UTXOs into an internal `Stake[account]` ledger; unbond mints a fresh UTXO. Simpler, achievable in scope, upgradeable to time-lock (option ii) later.
+- **Q4 = separate.** Staking does not auto-register a producer lock. `register_producer_lock` stays `ensure_root`. Staking and fee-payout-routing are different concerns.
 
-### 7-validator staging chain spec  (f2e6c4b7)
-- Runtime preset `calibre_staging` with 7 Aura + 7 GRANDPA authorities
-  (sp_keyring Alice..Ferdie + One). NOT for production.
-- Node chain spec `staging` routed in load_spec.
-- Re-export CALIBRE_STAGING_RUNTIME_PRESET from runtime crate root.
-- No `--alice`/`--bob` CLI in this SDK — validator startup is two
-  `key insert` calls + one `key generate-node-key`.
+### Future: Cardano-style liquid staking
+Cardano does NOT use burn-and-record. It uses a **dual-key model**: payment key (spends UTXOs) + staking key (delegates). Stake weight is counted from the delegation registry, not from locked UTXOs. ADA never moves and is never locked — you can spend while delegated, no slashing, no lock-up.
 
-**Verified (localhost, 7 processes):** full 6-peer mesh, GRANDPA
-finality engaged at the 5/7 threshold, best/finalized tracking with
-2-block lag at 6s blocks. First proof of multi-authority finality.
+This is the eventual target for **staking liquidity** because stakers keep spend-access to their principal. To build it, we need:
+1. A staking key registered per account (separate from the ML-DSA payment lock).
+2. A delegation certificate signed by that key.
+3. Consensus (Aura author selection, reward weighting) reading stake from the delegation registry, not from UTXO ownership.
 
-## Throughput — status
-Batch B (block byte cap 5 MB -> 20 MB) applied and live, but single-node
-bench numbers inconclusive: blocks show refTime 12.8% / bytes 27.7% used
-yet empty blocks appear while txs pend. Real limiter is upstream of
-block weight. Batch C (1s slots) tested and reverted: 167 -> 57 TPS,
-per-block fixed overhead (~0.7s) dominates short slots. Keep 6s.
-The "99.9% proof_size" claim in the prior handoff was mislabeled —
-proof_size is u64::MAX here; the binding limit was block byte length.
+That is a multi-session redesign — not in 8.7. Recorded here so the door stays open and (i) is understood as a stepping stone, not the final shape.
 
-## Just shipped (this session, Phase 8.1 -> 8.3)
+## Phase status
 
-### 8.1 — pallet-calibre-fees scaffold  (06766f93)
-- New pallet `pallets/calibre-fees` with FeeHandler trait, storage
-  (TreasuryLock, ProducerLocks, TreasuryAccumulated, BurnCounter),
-  extrinsics (set_treasury_lock, register_producer_lock), genesis config.
-- Fee split logic: 50% producer / 30% treasury / 20% burn.
-- minimum_fee scales with inputs + outputs.
-- Wired into runtime as pallet_index(10).
-- Design doc: docs/FEE_MARKET.md (seven locked decisions).
-- 9 tests green.
+| Phase | Description | Status |
+|---|---|---|
+| 7.x | Anti-spam, weights, 7-validator Docker, TPS parity | done |
+| 8.1 | calibre-fees scaffold | done |
+| 8.2 | FeeHandler wired into qutxo | done |
+| 8.3 | Pool admission rejects under-priced txs | done |
+| 8.4 | Dynamic base fee (EIP-1559-style) | done |
+| 8.5 | Block rewards | done |
+| 8.6 | Producer payout routing | done |
+| 8.7 | Stake pallet (bond/unbond) | **next** |
+| 8.8 | Valid-witness test harness | todo |
+| 8.9 | Bench txs pay fees | todo |
 
-### 8.2 — wire FeeHandler into qutxo  (530cfcec)
-- FeeHandler trait moved to calibre-primitives (single source of truth).
-- pallet-qutxo::Config gains type FeeHandler: FeeHandler<AccountId, Balance>.
-- execute_utxo_tx captures implicit fee (inputs - outputs) and calls
-  T::FeeHandler::charge_fee — value is no longer silently destroyed.
-- Runtime wires CalibreFees.
-- 17 qutxo + 9 calibre-fees tests green.
+## Open debt
 
-### 8.3 — reject under-priced txs at pool  (875c75a9)
-- validate_unsigned computes implicit fee and rejects with
-  InvalidTransaction::Payment if below minimum_fee.
-- Complements crypto anti-spam: no more zero-fee pool junk.
-- 17 qutxo tests still green.
+1. **`qutxo::TotalIssuance` is stale** on the `execute_utxo_tx` path — never decremented when inputs are consumed. Staking (8.7) will decrement it on its own path; `execute_utxo_tx` still needs a fix. Phase 8.x.
+2. **`AuraFindAuthor` slot -> author math is not unit-tested.** Runtime integration; can't be tested with the `u64` mock AccountId. Needs an integration test in `runtime`.
+3. **Treasury remains accounting-only.** `TreasuryAccumulated` is written but never minted. Treasury withdrawal (governance-gated) is a future concern.
+4. **`ProducerPending` exit semantics undocumented.** If a producer leaves the validator set with pending, it stays until they author again. Deliberate (no sweep, no governance call), but should be written down.
+5. **Bench txs pay zero fee.** With 8.3 live, next bench burst will fail pool admission. Fix in 8.9.
+6. **No valid-witness test harness.** Same debt as the ignored Phase 5 test; un-ignores two tests. Phase 8.8.
+7. **`/tmp/calibre-head` worktree check** confirmed `4e65e6f0` builds WASM clean — the earlier WASM failure was stale artifact from before the qutxo serde fix, not a real regression.
 
-## Open items / known debt
+## Next priorities
 
-1. qutxo::TotalIssuance storage is stale — never updated by execute_utxo_tx.
-   Either wire it or remove it. Phase 8.x.
-2. Producer argument to charge_fee is always None. The 50% producer cut is
-   computed but not routed. Needs pallet-authorship integration. Phase 8.2b.
-3. Bench txs pay zero fee (inputs == outputs). With 8.3 live, next burst
-   will fail with pool-rejected. Either bump bench to leave a fee, or zero
-   the BaseTxFee/PerInOutFee constants for bench runs.
-4. No end-to-end test for the fee rejection path — needs a valid ML-DSA
-   witness in the test harness. Same debt as the ignored Phase 5 test.
-   Doing the harness un-ignores both.
+1. **8.7 stake pallet** — `bond` / `unbond`, `Stake` ledger, `qutxo::consume_utxos_with_witness` helper. ~3-4h.
+2. **8.8 valid-witness test harness** — unblocks Phase 5 ignored test and the fee-rejection path E2E.
+3. **8.9 bench update** — bench txs must pay fees or 8.3 rejects them.
+4. **Push + tag** — session note update and push before next session.
 
-## Phase 8 remaining
+## Working rules
 
-- 8.2b — producer routing via pallet-authorship
-- 8.4  — dynamic base fee (EIP-1559 style)
-- 8.5  — block rewards (treasury-funded)
-- 8.6  — priority fee (optional producer-routed output)
-- 8.7  — stake pallet (bond/unbond only)
-- 8.8  — valid-witness test harness (un-ignores Phase 5 test)
-- 8.9  — bench update to pay fees
-
-## Where we are overall
-
-Phase 7.5 complete: anti-spam, honest weights, 7-validator Docker
-testnet, WAN-equivalent latency tolerance (1s RTT), throughput parity
-(169 TPS single vs multi).
-Phase 8.1-8.3 complete: fee market scaffold, fee capture in qutxo,
-fee-aware pool admission.
-
-## Next (priorities)
-1. Multi-validator Docker — containerize 7 validators, docker-compose
-   on one bridge, then tc netem latency injection. Deliverable:
-   docs/MULTI_VALIDATOR.md with topology, TPS, finality latency, HW spec.
-2. WAN split across 3 hosts (after Docker).
-3. Real keygen tooling (replaces sp_keyring staging keys; needed for
-   any non-test validator set).
-4. Full weight benchmarks (frame-benchmarking) once pallet API frozen.
-5. 7.6 Android (Ada).
-
-## Just shipped
-- **Phase 7.4 unblocked**: on-chain RISC Zero verifier works.
-  - crates/calibre-risc0-host uses risc0-zkvm 3.0.6 (same crate as prover).
-  - vk conversion [u8; 32] → [u32; 8] BE before verify.
-  - Verified end-to-end against a fresh 3.0.6 receipt.
-  - Standalone test: /tmp/pallet-verify/target/release/pallet-verify
-
-## Measured
-- 167 TPS single-validator, 1006 qutxo/6s block
-- Bottleneck: proof_size (99.9% used), NOT crypto (14% ref_time)
-- ML-DSA-44 verify: 208 µs/tx, ~$1e-9 electricity
-- See docs/BENCHMARK.md
-
-## Just shipped (this session)
-- **Anti-spam for `execute_utxo_tx`**: `validate_unsigned` now does full
-  ML-DSA-44 verification plus bounded-size, duplicate-input, lock-type,
-  and UTXO-existence pre-checks. Junk txs are rejected at pool admission
-  instead of forcing expensive verify in the block producer. 9 new tests
-  in pallets/qutxo/src/tests.rs (all green); 17/17 in the pallet suite.
-- **Batch B (byte cap)**: `RuntimeBlockLength` 5 MB -> 20 MB
-  (normal share = 15 MB). Applied, compiled, live. Bench numbers
-  inconclusive at single-node scale — real limiter is upstream of
-  block weight (blocks show refTime 12.8% / bytes 27.7% used, yet
-  empty blocks appear while txs pend). Logged as a caveat in
-  docs/BENCHMARK.md.
-- **Batch C (slot time)**: 6 s -> 1 s tested and REVERTED. 167 TPS
-  became 57 TPS — per-block fixed overhead (~0.7 s) dominates at 1 s
-  slots. Reverted to 6000 ms. Keep 6 s until overhead is attacked.
-
-## Next (priorities)
-1. Batch B: proof_size 5→15 MB. Expected ~480 TPS.
-2. Batch C: slot 6s→1s. Combined with B, expected ~2880 TPS.
-3. Multi-validator Docker: 7 vals on 3 Linux machines, staged LAN → WAN.
-4. Anti-spam for execute_utxo_tx (validate_unsigned doesn't verify sigs).
-5. Session key management.
-6. 7.6 Android (Ada).
-
-## Working commands and rules
-See the SESSION HANDOFF message in the previous chat.
+- Stay in `~/calibre-template`.
+- Long heredocs get mangled — use `python3 - << 'PYEOF'`.
+- `git --no-pager` on every log/show/diff.
+- On Rust compile errors: `cargo build 2>&1 | head -60` to see the real cause, not the build-script wrapper.
+- `SKIP_WASM_BUILD=1` for fast iteration; full WASM build before commit.

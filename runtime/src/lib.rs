@@ -278,4 +278,8 @@ mod runtime {
 	#[runtime::pallet_index(10)]
 	pub type CalibreFees = pallet_calibre_fees;
 
+	// Staking — bond / unbond into a pallet-internal ledger
+	#[runtime::pallet_index(11)]
+	pub type Stake = pallet_stake;
+
 }
