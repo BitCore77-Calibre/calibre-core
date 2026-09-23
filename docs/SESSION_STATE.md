@@ -2,9 +2,10 @@
 
 ## Where we are
 
-- **Commit:** `16da3d67` (local, not pushed — `origin/main` at `4e65e6f0`)
-- **Phase:** 8.6, 8.7, 8.8, 8.9 complete; Phase 5 test un-ignored. **Phase 8 fully closed.** Next: TotalIssuance fix, AuraFindAuthor integration test.
-- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> 68 passed, 0 ignored.
+- **Commit:** `9b9d7af` (tagged `v0.8.10-debt-closed`, pushed to origin/main).
+- **Phase:** Phase 8 fully closed + all three open debt items resolved.
+- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> **78 passed, 0 ignored, 0 failed.**
+- **Next:** Phase 9 planning (sessions, epochs, BABE migration, real keygen tooling).
 
 ## Locked this session
 
@@ -50,9 +51,9 @@ That is a multi-session redesign — not in 8.7. Recorded here so the door stays
 
 ## Open debt
 
-1. **`qutxo::TotalIssuance` is stale** on the `execute_utxo_tx` path — never decremented when inputs are consumed. Staking (8.7) will decrement it on its own path; `execute_utxo_tx` still needs a fix. Phase 8.x.
-2. **`AuraFindAuthor` slot -> author math is not unit-tested.** Runtime integration; can't be tested with the `u64` mock AccountId. Needs an integration test in `runtime`.
-3. **Treasury remains accounting-only.** `TreasuryAccumulated` is written but never minted. Treasury withdrawal (governance-gated) is a future concern.
+1. ~~**`qutxo::TotalIssuance` is stale** on the `execute_utxo_tx` path.~~ **RESOLVED `9b9d7af`.** Symmetric decrement/increment added; invariant restored; two tests (success + failure paths) using the real ML-DSA harness.
+2. ~~**`AuraFindAuthor` slot -> author math is not unit-tested.**~~ **RESOLVED `9b9d7af`.** Extracted `author_index_for_slot()` helper, 5 unit tests covering 0/1/7/21 authorities + u64::MAX. Trait-level digest-parsing integration test deferred to Phase 9.
+3. ~~**Treasury remains accounting-only.**~~ **RESOLVED `9b9d7af`.** Added `settle_treasury()` with threshold (Option C). Auto-settles in `on_finalize` when accumulator >= `MinTreasurySettle` (1,000 CAL) AND `TreasuryLock` is set. New `TreasurySettled` event. 3 tests.
 4. **`ProducerPending` exit semantics undocumented.** If a producer leaves the validator set with pending, it stays until they author again. Deliberate (no sweep, no governance call), but should be written down.
 5. **~~Bench txs pay zero fee.~~** RESOLVED. `tools/bench burst` subtracts a configurable fee (default 10_000 base units, override via 5th positional arg) from each output so `inputs > outputs`. Skips and reports UTXOs smaller than the fee rather than underflowing.
 6. **~~No valid-witness test harness.~~** RESOLVED. Real ML-DSA-44 keygen + sign in qutxo tests. `test_utxo_conservation_of_mass_and_double_spend` un-ignored; three fee-rejection E2E tests added with a configurable `TestFeeHandler`.
