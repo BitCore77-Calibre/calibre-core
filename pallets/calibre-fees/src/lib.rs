@@ -66,6 +66,12 @@ pub mod pallet {
         #[pallet::constant]
         type BlockRewardPerBlock: Get<Self::Balance>;
 
+        /// Minimum accumulated treasury balance before a settlement UTXO is
+        /// minted. Below this threshold the balance carries forward, keeping
+        /// the UTXO set from filling with dust. Governance-adjustable later.
+        #[pallet::constant]
+        type MinTreasurySettle: Get<Self::Balance>;
+
         /// Percent of the fee routed to the block producer (0-100).
         #[pallet::constant]
         type ProducerFeeShare: Get<u8>;
@@ -157,6 +163,8 @@ pub mod pallet {
             account: T::AccountId,
             lock: [u8; 32],
         },
+        /// Treasury accumulator was settled into a UTXO.
+        TreasurySettled { amount: T::Balance },
         /// Producer payout settled and minted as a UTXO.
         ProducerPaid { account: T::AccountId, amount: T::Balance },
         /// Producer payout deferred — no lock registered yet. Held pending.
@@ -209,6 +217,7 @@ pub mod pallet {
             Self::adjust_base_fee();
             Self::distribute_block_reward();
             Self::settle_producer_payouts();
+            Self::settle_treasury();
         }
     }
 
@@ -378,6 +387,25 @@ pub mod pallet {
         /// time is whatever `ProducerLocks[author]` currently holds.
         ///
         /// Treasury stays accounting-only — no mint path for it in 8.6.
+        /// Settle accumulated treasury into a single UTXO if the balance
+        /// crosses `MinTreasurySettle`. Below threshold: no-op (carry forward).
+        /// No lock configured: defer (accumulator keeps growing).
+        /// No author or no fees this block: naturally no-op via threshold.
+        pub fn settle_treasury() {
+            let accumulated = TreasuryAccumulated::<T>::get();
+            if accumulated < T::MinTreasurySettle::get() {
+                return;
+            }
+            let lock = TreasuryLock::<T>::get();
+            if lock == [0u8; 32] {
+                // Treasury lock not yet configured by governance; defer.
+                return;
+            }
+            T::FeeMinter::mint_to_lock(accumulated, lock);
+            TreasuryAccumulated::<T>::put(T::Balance::default());
+            Self::deposit_event(Event::TreasurySettled { amount: accumulated });
+        }
+
         pub fn settle_producer_payouts() {
             let author = match CurrentAuthor::<T>::get() {
                 Some(a) => a,

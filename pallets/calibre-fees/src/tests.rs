@@ -66,6 +66,7 @@ parameter_types! {
     pub const MinBaseFee: u128 = 500;
     pub const MaxBaseFee: u128 = 1_000_000;
     pub const BlockRewardPerBlock: u128 = 10_000;
+    pub const MinTreasurySettle: u128 = 100;
 }
 
 pub struct TestFindAuthor;
@@ -90,6 +91,7 @@ impl pallet_calibre_fees::Config for Test {
     type MinBaseFee = MinBaseFee;
     type MaxBaseFee = MaxBaseFee;
     type BlockRewardPerBlock = BlockRewardPerBlock;
+    type MinTreasurySettle = MinTreasurySettle;
     type FindAuthor = TestFindAuthor;
     type FeeMinter = RecordingMinter;
     type WeightInfo = ();
@@ -424,5 +426,39 @@ fn settle_zero_is_noop() {
 
         assert!(take_minted().is_empty());
         assert_eq!(author_pending(7), 0);
+    });
+}
+
+// ── Treasury settle tests ──
+
+#[test]
+fn treasury_settle_below_threshold_no_op() {
+    new_test_ext().execute_with(|| {
+        // Accumulator at 50, threshold at 100 — should not mint.
+        TreasuryAccumulated::<Test>::put(50);
+        Fees::settle_treasury();
+        assert_eq!(TreasuryAccumulated::<Test>::get(), 50, "below threshold: accumulator unchanged");
+    });
+}
+
+#[test]
+fn treasury_settle_without_lock_defers() {
+    new_test_ext().execute_with(|| {
+        // Above threshold but no lock set. New genesis puts lock = [7u8;32]
+        // in the default mock — clear it to test the deferral path.
+        TreasuryLock::<Test>::put([0u8; 32]);
+        TreasuryAccumulated::<Test>::put(500);
+        Fees::settle_treasury();
+        assert_eq!(TreasuryAccumulated::<Test>::get(), 500, "no lock: accumulator preserved");
+    });
+}
+
+#[test]
+fn treasury_settle_above_threshold_clears() {
+    new_test_ext().execute_with(|| {
+        // Lock is set (genesis sets [7u8;32]). Accumulator above threshold.
+        TreasuryAccumulated::<Test>::put(1_000);
+        Fees::settle_treasury();
+        assert_eq!(TreasuryAccumulated::<Test>::get(), 0, "above threshold: accumulator cleared");
     });
 }

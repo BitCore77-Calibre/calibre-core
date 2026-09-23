@@ -92,12 +92,22 @@ pub mod pallet {
                 UtxoSet::<T>::remove(utxo_hash);
                     Self::mark_utxo_set_dirty();
             }
+            // Mirror the UtxoConsumer path: consumed value leaves the UTXO set.
+            // Producer/treasury accumulators are handled separately by the fee
+            // pallet; the burned share of the fee leaves TotalIssuance for good.
+            if total_input_value > T::Balance::default() {
+                TotalIssuance::<T>::mutate(|t| *t = t.saturating_sub(total_input_value));
+            }
             let mut total_output_value = T::Balance::default();
             for (idx, output) in tx.outputs.iter().enumerate() {
                 total_output_value = total_output_value.saturating_add(output.value);
                 let new_utxo_hash = Self::calculate_utxo_hash(tx_hash, idx as u32);
                 UtxoSet::<T>::insert(new_utxo_hash, Utxo { value: output.value, lock: output.lock.clone() });
             Self::mark_utxo_set_dirty();
+            }
+            // Symmetric: created value enters the UTXO set.
+            if total_output_value > T::Balance::default() {
+                TotalIssuance::<T>::mutate(|t| *t = t.saturating_add(total_output_value));
             }
             ensure!(total_input_value >= total_output_value, Error::<T>::ValueMismatch);
             let total_fee = total_input_value.saturating_sub(total_output_value);

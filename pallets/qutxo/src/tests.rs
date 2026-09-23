@@ -537,3 +537,77 @@ fn validate_unsigned_accepts_zero_fee_when_minimum_is_zero() {
         assert!(run_validate_unsigned(tx).is_ok());
     });
 }
+
+#[test]
+fn total_issuance_tracks_execute_utxo_tx_success() {
+    new_test_ext().execute_with(|| {
+        use crate::{TotalIssuance, UtxoSet};
+        use calibre_primitives::{TransactionInput, TransactionOutput, Utxo};
+
+        // Genesis UTXO hash — the input references this.
+        let genesis_tx_hash = H256::from([42u8; 32]);
+        let genesis_hash = Qutxo::calculate_utxo_hash(genesis_tx_hash, 0);
+
+        // Build a valid signed tx FIRST so we capture the lock it signs against.
+        let inputs = vec![TransactionInput { tx_hash: genesis_tx_hash, output_index: 0 }];
+        let outputs = vec![TransactionOutput {
+            value: 900,
+            lock: QuantumLock::SingleSig([1u8; 32]),
+        }];
+        let (lock, tx) = real_signed_tx(inputs, outputs);
+
+        // Seed the UTXO with the matching lock and 1,000 units.
+        UtxoSet::<Test>::insert(genesis_hash, Utxo { value: 1_000, lock });
+        TotalIssuance::<Test>::put(1_000);
+
+        // Execute — must succeed with a real witness.
+        Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx)
+            .expect("valid signed tx must execute");
+
+        // Invariant: TotalIssuance == sum(UTXO values).
+        // Before: 1,000. After: 900 (spender output). The 100 fee was
+        // captured by the FeeHandler, not minted as a UTXO yet.
+        assert_eq!(
+            TotalIssuance::<Test>::get(),
+            900,
+            "TotalIssuance must decrement by consumed and increment by created"
+        );
+
+        // Cross-check: no UTXO for the genesis hash remains.
+        assert!(UtxoSet::<Test>::get(genesis_hash).is_none());
+    });
+}
+
+#[test]
+fn total_issuance_unchanged_on_failed_tx() {
+    new_test_ext().execute_with(|| {
+        use crate::{TotalIssuance, UtxoSet};
+        use calibre_primitives::{TransactionInput, TransactionOutput, Utxo};
+
+        let genesis_tx_hash = H256::from([43u8; 32]);
+        let genesis_hash = Qutxo::calculate_utxo_hash(genesis_tx_hash, 0);
+        UtxoSet::<Test>::insert(
+            genesis_hash,
+            Utxo { value: 1_000, lock: QuantumLock::AegisThreshold([0u8; 32]) },
+        );
+        TotalIssuance::<Test>::put(1_000);
+
+        // Build a tx with a bad witness (mock_witness has empty pub_keys).
+        let tx = Transaction {
+            inputs: vec![TransactionInput { tx_hash: genesis_tx_hash, output_index: 0 }],
+            outputs: vec![TransactionOutput {
+                value: 900,
+                lock: QuantumLock::AegisThreshold([1u8; 32]),
+            }],
+            pq_signature: vec![],
+            witness: mock_witness(),
+        };
+
+        let result = Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx);
+        assert!(result.is_err(), "bad witness must fail");
+
+        // No state change on failure.
+        assert_eq!(TotalIssuance::<Test>::get(), 1_000);
+        assert!(UtxoSet::<Test>::get(genesis_hash).is_some());
+    });
+}

@@ -183,6 +183,9 @@ parameter_types! {
 	/// Block reward minted per block: 10 CAL = 10_000_000_000_000_000_000 units (18 decimals).
 	/// Tunable down over time by governance.
 	pub const BlockRewardPerBlock: Balance = 5_300_000_000_000_000_000u128;
+	/// Treasury accumulates below this and doesn't mint (1,000 CAL = 1e21 units).
+	/// Keeps UTXO set clean — one treasury UTXO per ~60 blocks at launch.
+	pub const MinTreasurySettle: Balance = 1_000_000_000_000_000_000_000;
 }
 
 /// Resolve the Aura block author from the pre-runtime digest.
@@ -207,7 +210,7 @@ impl frame_support::traits::FindAuthor<AccountId> for AuraFindAuthor {
                     return None;
                 }
                 if let Ok(slot) = u64::decode(&mut &data[..]) {
-                    let idx = (slot % authorities.len() as u64) as usize;
+                    let idx = author_index_for_slot(slot, authorities.len())?;
                     let authority = authorities.get(idx).cloned()?;
                     let bytes: [u8; 32] = authority.to_raw_vec().try_into().ok()?;
                     return Some(sp_runtime::AccountId32::from(bytes).into());
@@ -215,6 +218,68 @@ impl frame_support::traits::FindAuthor<AccountId> for AuraFindAuthor {
             }
         }
         None
+    }
+}
+
+/// Pure slot→author-index math used by [`AuraFindAuthor`]. Extracted so it
+/// can be unit-tested without spinning up a full runtime.
+///
+/// Aura rotates authorities round-robin by slot: `authorities[slot % n]`.
+/// Returns `None` for an empty authority set (should never happen at
+/// runtime, but defensive).
+#[inline]
+pub(crate) fn author_index_for_slot(slot: u64, n_authorities: usize) -> Option<usize> {
+    if n_authorities == 0 {
+        return None;
+    }
+    Some((slot % n_authorities as u64) as usize)
+}
+
+#[cfg(test)]
+mod aura_find_author_tests {
+    use super::author_index_for_slot;
+
+    #[test]
+    fn empty_authority_set_returns_none() {
+        assert_eq!(author_index_for_slot(0, 0), None);
+        assert_eq!(author_index_for_slot(42, 0), None);
+    }
+
+    #[test]
+    fn single_authority_always_index_zero() {
+        assert_eq!(author_index_for_slot(0, 1), Some(0));
+        assert_eq!(author_index_for_slot(1, 1), Some(0));
+        assert_eq!(author_index_for_slot(999_999, 1), Some(0));
+    }
+
+    #[test]
+    fn seven_authorities_wrap_round_robin() {
+        // Matches the staging validator set size.
+        let n = 7;
+        assert_eq!(author_index_for_slot(0, n), Some(0));
+        assert_eq!(author_index_for_slot(1, n), Some(1));
+        assert_eq!(author_index_for_slot(6, n), Some(6));
+        assert_eq!(author_index_for_slot(7, n), Some(0), "slot 7 wraps to index 0");
+        assert_eq!(author_index_for_slot(8, n), Some(1));
+        assert_eq!(author_index_for_slot(14, n), Some(0), "two full rotations");
+    }
+
+    #[test]
+    fn twenty_one_authorities_wrap_round_robin() {
+        // Matches the Phase 9 target validator set size.
+        let n = 21;
+        assert_eq!(author_index_for_slot(0, n), Some(0));
+        assert_eq!(author_index_for_slot(20, n), Some(20));
+        assert_eq!(author_index_for_slot(21, n), Some(0));
+        assert_eq!(author_index_for_slot(42, n), Some(0));
+    }
+
+    #[test]
+    fn large_slot_values_do_not_overflow() {
+        // Aura slot is u64; ensure modulo is safe at extremes.
+        let n = 7;
+        assert_eq!(author_index_for_slot(u64::MAX, n), Some((u64::MAX % 7) as usize));
+        assert_eq!(author_index_for_slot(u64::MAX - 1, n), Some(((u64::MAX - 1) % 7) as usize));
     }
 }
 
@@ -239,6 +304,7 @@ impl pallet_calibre_fees::Config for Runtime {
 	type MinBaseFee = MinBaseFee;
 	type MaxBaseFee = MaxBaseFee;
 	type BlockRewardPerBlock = BlockRewardPerBlock;
+	type MinTreasurySettle = MinTreasurySettle;
 	type FindAuthor = AuraFindAuthor;
 	type FeeMinter = crate::Qutxo;
 	type WeightInfo = pallet_calibre_fees::weights::SubstrateWeight<Runtime>;
