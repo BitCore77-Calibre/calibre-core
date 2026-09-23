@@ -744,6 +744,9 @@
         <li><b>Producer payout routing</b><span>fees and rewards mint to producer UTXO at block end; unregistered producers accrue pending, never burned</span></li>
         <li><b>Stake pallet</b><span>bond/unbond with a burn-and-record ledger</span></li>
         <li><b>Real ML-DSA-44 test harness</b><span>keygen + sign in tests; Phase 5 conservation test un-ignored</span></li>
+        <li><b>calibre-light v0.4</b><span>trust tier 1 + tier 2 state-proof verification; UniFFI bindings for Swift and Kotlin</span></li>
+        <li><b>On-chain ZK verifier</b><span>risc0-zkvm 3.0.6, verified end-to-end (Phase 7.4)</span></li>
+        <li><b>Merkle inclusion proofs</b><span>calibre-merkle crate + QutxoApi RPC endpoint (Phase 7.1-7.2d)</span></li>
       </ul>
     </div>
 
@@ -755,7 +758,8 @@
       <ul class="reality-list">
         <li><b>Full benchmark suite</b><span>hand-derived weights in place; frame-benchmarking regeneration pending</span></li>
         <li><b>try-runtime migrations</b><span>runtime upgrades not yet supported; needed before mainnet</span></li>
-        <li><b>Light-client state proofs</b><span>on-chain ZK verifier shipped; succinct per-block proofs pending</span></li>
+        <li><b>Production mobile app</b><span>cross-compile verified; full app build (Phase 7.6) pending</span></li>
+        <li><b>Single-node throughput limiter</b><span>empty blocks appear while txs pend; binding limit upstream of block weight</span></li>
       </ul>
 
       <div class="reality-head planned-head">
@@ -1079,7 +1083,7 @@
       <div class="tl-marker">7</div>
       <div class="tl-body">
         <h3>Light nodes + ZK state proofs</h3>
-        <p>On-chain RISC Zero verifier shipped (risc0-zkvm 3.0.6, verified end-to-end). Succinct per-block state proofs and mobile light-client verification pending.</p>
+        <p>calibre-light v0.4 (tier-1 + tier-2 state-proof verification) shipped with UniFFI bindings for Swift and Kotlin. On-chain RISC Zero verifier live (risc0-zkvm 3.0.6). Android cross-compile verified. Production mobile app pending.</p>
         <div class="tl-status progress">in progress</div>
       </div>
     </div>
