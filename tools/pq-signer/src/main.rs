@@ -32,6 +32,7 @@ fn main() {
         "init" => cmd_init(&args),
         "show" => cmd_show(&args),
         "check" => cmd_check(&args),
+        "export-chain-spec" => cmd_export_chain_spec(&args),
 
         "help" | "--help" | "-h" => { print_help(); Ok(()) }
         _ => Err(format!("unknown command: {}", cmd)),
@@ -54,6 +55,9 @@ fn print_help() {
     eprintln!("      Print the public parts of an identity.");
     eprintln!("  check --base-path <dir> --name <v1>");
     eprintln!("      Verify all keystore files are present.");
+    eprintln!("  export-chain-spec --base-path <dir> --validators <v1> <v2> ... \\");
+    eprintln!("        [--template <staging>] [--out <file>] [--node-bin <path>]");
+    eprintln!("      Patch a chain spec with the given validators' authority keys.");
     eprintln!();
     eprintln!("Legacy (docker-compose compatibility):");
     eprintln!("  keygen | pubkey | sign <hex> | verify <pk> <msg> <sig>");
@@ -331,6 +335,159 @@ fn resolve_chain_id(node_bin: &str, chain_alias: &str) -> Result<String, String>
         }
     }
     Err(format!("could not parse chain id from build-spec output for {}", chain_alias))
+}
+
+/// Extract a pubkey hex string from a keystore filename.
+/// Keystore entries are named `<key_type_ascii_hex><pubkey_hex>`.
+/// Returns the pubkey hex (everything after the 8-char prefix).
+fn read_keystore_pubkey(keystore: &Path, key_type: &str) -> Result<String, String> {
+    let prefix = hex::encode(key_type.as_bytes());
+    let entries = fs::read_dir(keystore)
+        .map_err(|e| format!("read {}: {}", keystore.display(), e))?;
+    for entry in entries.flatten() {
+        if let Some(name) = entry.file_name().to_str() {
+            if name.starts_with(&prefix) {
+                return Ok(name[prefix.len()..].to_string());
+            }
+        }
+    }
+    Err(format!("no {} key found in {}", key_type, keystore.display()))
+}
+
+/// hex (32 bytes) -> SS58 address for sr25519.
+fn sr25519_hex_to_ss58(hex_str: &str) -> Result<String, String> {
+    use sp_core::crypto::Ss58Codec;
+    use sp_core::sr25519::Public;
+    let bytes = hex::decode(hex_str).map_err(|e| format!("hex: {}", e))?;
+    let arr: [u8; 32] = bytes.as_slice().try_into()
+        .map_err(|_| format!("expected 32 bytes, got {}", bytes.len()))?;
+    Ok(Public::from_raw(arr).to_ss58check())
+}
+
+/// hex (32 bytes) -> SS58 address for ed25519.
+fn ed25519_hex_to_ss58(hex_str: &str) -> Result<String, String> {
+    use sp_core::crypto::Ss58Codec;
+    use sp_core::ed25519::Public;
+    let bytes = hex::decode(hex_str).map_err(|e| format!("hex: {}", e))?;
+    let arr: [u8; 32] = bytes.as_slice().try_into()
+        .map_err(|_| format!("expected 32 bytes, got {}", bytes.len()))?;
+    Ok(Public::from_raw(arr).to_ss58check())
+}
+
+fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
+    let base_path = parse_flag(args, "--base-path").ok_or("export-chain-spec requires --base-path")?;
+    let template = parse_flag(args, "--template").unwrap_or_else(|| "staging".into());
+    let out = parse_flag(args, "--out").ok_or("export-chain-spec requires --out")?;
+    let node_bin = parse_flag(args, "--node-bin")
+        .or_else(find_node_binary)
+        .ok_or("export-chain-spec requires --node-bin, or solochain-template-node in PATH")?;
+
+    // Parse validator names after --validators (all non-flag args until next --flag).
+    let mut validators: Vec<String> = Vec::new();
+    if let Some(i) = args.iter().position(|a| a == "--validators") {
+        for a in &args[i + 1..] {
+            if a.starts_with("--") { break; }
+            validators.push(a.clone());
+        }
+    }
+    if validators.is_empty() {
+        return Err("export-chain-spec requires at least one validator name after --validators".into());
+    }
+
+    // 1. Get the base spec.
+    eprintln!("[1/3] Building base spec (template = {})", template);
+    let out_spec = Command::new(&node_bin)
+        .args(["build-spec", "--chain", &template, "--disable-default-bootnode"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map_err(|e| format!("spawn build-spec: {}", e))?;
+    if !out_spec.status.success() {
+        return Err(format!("build-spec --chain {} failed", template));
+    }
+    let stdout = String::from_utf8_lossy(&out_spec.stdout);
+    // Skip any log lines before the JSON starts.
+    let json_start = stdout.find('{').ok_or("no JSON in build-spec output")?;
+    let spec: serde_json::Value = serde_json::from_str(&stdout[json_start..])
+        .map_err(|e| format!("parse base spec: {}", e))?;
+
+    // 2. Collect authority keys from each validator.
+    eprintln!("[2/3] Collecting authority keys");
+    let base = Path::new(&base_path);
+    let chain_id = resolve_chain_id(&node_bin, &template)
+        .unwrap_or_else(|_| "calibre_staging".into());
+
+    let mut aura_ss58: Vec<String> = Vec::new();
+    let mut grandpa_ss58: Vec<serde_json::Value> = Vec::new();
+    let mut account_ss58: Vec<String> = Vec::new();
+
+    for name in &validators {
+        let dir = Identity::dir(base, name);
+        let keystore = dir.join("chains").join(&chain_id).join("keystore");
+        if !keystore.exists() {
+            return Err(format!("keystore missing for validator {}: {}", name, keystore.display()));
+        }
+        let aura_hex = read_keystore_pubkey(&keystore, "aura")?;
+        let gran_hex = read_keystore_pubkey(&keystore, "gran")?;
+        let aura_ss = sr25519_hex_to_ss58(&aura_hex)?;
+        let gran_ss = ed25519_hex_to_ss58(&gran_hex)?;
+        // The validator's account ID is their sr25519 pubkey, same encoding.
+        let account_ss = aura_ss.clone();
+
+        eprintln!("      {}: aura={} grandpa={}", name, &aura_ss[..12], &gran_ss[..12]);
+        aura_ss58.push(aura_ss);
+        grandpa_ss58.push(serde_json::json!([gran_ss, 1]));
+        account_ss58.push(account_ss);
+    }
+
+    // 3. Patch the spec.
+    eprintln!("[3/3] Patching genesis");
+    let mut spec = spec;
+    let patch = spec["genesis"]["runtimeGenesis"]["patch"]
+        .as_object_mut()
+        .ok_or("missing genesis.runtimeGenesis.patch")?;
+
+    // aura.authorities
+    patch["aura"]["authorities"] = serde_json::json!(aura_ss58);
+
+    // grandpa.authorities
+    patch["grandpa"]["authorities"] = serde_json::json!(grandpa_ss58);
+
+    // Balances: leave as the template spec's default. The base staging
+    // preset already endows the sp_keyring accounts (Alice..Ferdie+One),
+    // which match our test validators when they're generated with
+    // sp_keyring-derived suris. Endowing arbitrary accounts with
+    // large u128 amounts requires a different JSON encoding strategy
+    // (see Phase 9.1c), and isn't needed for the boot test.
+    //
+    // When random suris are supported, this is where balance endowments
+    // land for the corresponding account IDs.
+
+    // sudo: first validator.
+    if let Some(first) = account_ss58.first() {
+        patch["sudo"]["key"] = serde_json::json!(first);
+    }
+
+    // Update the spec's name + id for the new chain.
+    spec["name"] = serde_json::json!(format!("Calibre {} ({} validators)", template, validators.len()));
+    spec["id"] = serde_json::json!(format!("calibre_{}", template));
+
+    // Write.
+    let out_str = serde_json::to_string_pretty(&spec)
+        .map_err(|e| format!("serialize: {}", e))?;
+    fs::write(&out, out_str).map_err(|e| format!("write {}: {}", out, e))?;
+
+    eprintln!();
+    eprintln!("Wrote chain spec:");
+    eprintln!("  output      : {}", out);
+    eprintln!("  validators  : {}", validators.len());
+    eprintln!("  aura keys   : {}", aura_ss58.len());
+    eprintln!("  grandpa keys: {}", grandpa_ss58.len());
+    eprintln!("  sudo        : {}", account_ss58[0]);
+    eprintln!();
+    eprintln!("Boot with:");
+    eprintln!("  solochain-template-node --chain {} --validator --name <name> \\", out);
+    eprintln!("      --base-path <path-to-that-validators-base>");
+    Ok(())
 }
 
 fn find_node_binary() -> Option<String> {
