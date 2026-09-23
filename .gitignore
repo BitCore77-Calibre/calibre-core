@@ -19,3 +19,6 @@ crates/calibre-light/bindings/**/*.dylib
 crates/calibre-light/bindings/**/*.dll
 deploy/bin/
 deploy/secrets/
+deploy/wan/calibre-node-image.tar
+deploy/wan/secrets/
+deploy/wan/bin/

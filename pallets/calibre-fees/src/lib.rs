@@ -58,6 +58,13 @@ pub mod pallet {
         #[pallet::constant]
         type MaxBaseFee: Get<Self::Balance>;
 
+        /// Block reward minted per block. Split between producer and treasury
+        /// by the same percentages used for fees (ProducerFeeShare /
+        /// TreasuryFeeShare). Burn share is not applied to rewards — all
+        /// reward value is distributed.
+        #[pallet::constant]
+        type BlockRewardPerBlock: Get<Self::Balance>;
+
         /// Percent of the fee routed to the block producer (0-100).
         #[pallet::constant]
         type ProducerFeeShare: Get<u8>;
@@ -93,6 +100,11 @@ pub mod pallet {
     #[pallet::getter(fn current_base_fee)]
     pub type CurrentBaseFee<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
+    /// Cumulative block rewards minted since genesis. Stats only.
+    #[pallet::storage]
+    #[pallet::getter(fn total_rewards_minted)]
+    pub type TotalRewardsMinted<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -101,6 +113,11 @@ pub mod pallet {
             producer: T::Balance,
             treasury: T::Balance,
             burned: T::Balance,
+        },
+        /// Block reward was minted and split.
+        BlockRewardMinted {
+            producer: T::Balance,
+            treasury: T::Balance,
         },
         /// Treasury ML-DSA lock was updated.
         TreasuryLockSet { lock: [u8; 32] },
@@ -144,6 +161,7 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(_n: BlockNumberFor<T>) {
             Self::adjust_base_fee();
+            Self::distribute_block_reward();
         }
     }
 
@@ -175,6 +193,40 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// Mint and split the block reward. Called in `on_finalize`.
+        ///
+        /// Producer share is recorded via the same accounting used for fees,
+        /// but routed to `ProducerFeeShare` instead of being tracked as a cut.
+        /// Phase 8.2b wires the actual UTXO creation via pallet-authorship.
+        pub fn distribute_block_reward() {
+            let reward = T::BlockRewardPerBlock::get();
+            if reward == T::Balance::default() {
+                return;
+            }
+
+            let reward_u128: u128 = reward.into();
+            let producer_pct = T::ProducerFeeShare::get() as u128;
+            let treasury_pct = T::TreasuryFeeShare::get() as u128;
+
+            let producer_u128 = reward_u128.saturating_mul(producer_pct) / 100;
+            let treasury_u128 = reward_u128.saturating_mul(treasury_pct) / 100;
+
+            // Remaining % stays as producer cut in practice — all reward value
+            // is distributed (no burn on issuance).
+            let producer_total_u128 = reward_u128.saturating_sub(treasury_u128);
+
+            let treasury_cut: T::Balance = treasury_u128.into();
+            TreasuryAccumulated::<T>::mutate(|t| *t = t.saturating_add(treasury_cut));
+            TotalRewardsMinted::<T>::mutate(|m| *m = m.saturating_add(reward));
+
+            let _ = producer_total_u128; // Phase 8.2b routes this
+
+            Self::deposit_event(Event::BlockRewardMinted {
+                producer: producer_total_u128.into(),
+                treasury: treasury_cut,
+            });
+        }
+
         /// Adjust the dynamic base fee based on the current block's weight.
         /// Called in `on_finalize`; sets the fee for the *next* block.
         pub fn adjust_base_fee() {

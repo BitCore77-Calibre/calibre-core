@@ -6843,6 +6843,7 @@ dependencies = [
 name = "pallet-calibre-fees"
 version = "0.1.0"
 dependencies = [
+ "calibre-primitives",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
