@@ -1,75 +1,35 @@
-# Calibre Session State
-
 ## Where we are
 
-- **Commit:** `9b9d7af` (tagged `v0.8.10-debt-closed`, pushed to origin/main).
-- **Phase:** Phase 8 fully closed + all three open debt items resolved.
-- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> **78 passed, 0 ignored, 0 failed.**
-- **Next:** Phase 9 planning (sessions, epochs, BABE migration, real keygen tooling).
+- **Commit:** `0b61624` (tag `v0.9.3-epochs`, pushed to origin/main)
+- **Phase:** 9.1a, 9.1b, 9.2, 9.3 complete. Phase 8 fully closed.
+- **Build:** native + WASM clean. SKIP_WASM_BUILD=1 cargo test --workspace -> 97 passed.
+- **Next:** Phase 9.4 (BABE migration). 2-week scope. Not started.
 
-## Locked this session
+## Phase 9 progress
 
-### Economic (unchanged from prior sessions)
-- 777M genesis, 5.3 CAL/block, 4y halving, 1B cap.
-- Self-funded bootstrap (EUR 13.5K, no VC raise pre-product).
-- Fee split 50/30/20, reward split 70/30, priority fee 100% producer.
-- Dynamic base fee EIP-1559-style (12% change, 500-1M range).
+| Sub-phase | Status | Commit |
+|-----------|--------|--------|
+| 9.1a — calibre-keygen (init/show/check) | done | 2bafab3 |
+| 9.1b — export-chain-spec | done | 1e01be0 |
+| 9.2 — pallet-session wired | done | 431679f |
+| 9.3 — epoch machinery + candidate registry | done | 0b61624 |
+| 9.4 — Aura to BABE migration | next | — |
+| 9.5 — stake-weighted leader election | — | — |
+| 9.6 — slashing + equivocation | — | — |
+| 9.7 — on-chain governance | — | — |
+| 9.8 — forkless runtime upgrades | — | — |
 
-### Phase 8.6 design (Q1/Q2)
-- **Q1 = once per block.** Producer payouts settle in `on_finalize`, batched, not per-tx. Matches existing `adjust_base_fee` / `distribute_block_reward` cadence. One UTXO per producer per block.
-- **Q2(a) = leave pending, never burn.** Unregistered producers accrue in `ProducerPending[account]`; mint happens on a later block once `register_producer_lock` is called. Follows Ethereum 0x00-credential + Cosmos outstanding-commission precedent.
-- Author resolution via a `FindAuthor` config type (`AuraFindAuthor` at runtime), **not** a `pallet-authorship` dependency. If other pallets later want `Authorship::author()`, add pallet-authorship on top of the same struct — 4-line follow-up.
+## What 9.1-9.3 shipped
 
-### Phase 8.7 design (Q3/Q4)
-- **Q3 = option (i), burn-and-record.** Bond consumes UTXOs into an internal `Stake[account]` ledger; unbond mints a fresh UTXO. Simpler, achievable in scope, upgradeable to time-lock (option ii) later.
-- **Q4 = separate.** Staking does not auto-register a producer lock. `register_producer_lock` stays `ensure_root`. Staking and fee-payout-routing are different concerns.
+- calibre-keygen binary: init/show/check/export-chain-spec
+- pallet-session at pallet_index(12), 1-hour sessions
+- Candidate registry in pallet-stake (Candidates storage, join/leave, MinValidatorStake=1000 CAL)
+- elect_top_n selection, CalibreSessionManager rotates set every 6 sessions (6 hours)
 
-### Future: Cardano-style liquid staking
-Cardano does NOT use burn-and-record. It uses a **dual-key model**: payment key (spends UTXOs) + staking key (delegates). Stake weight is counted from the delegation registry, not from locked UTXOs. ADA never moves and is never locked — you can spend while delegated, no slashing, no lock-up.
+## Open follow-ups
 
-This is the eventual target for **staking liquidity** because stakers keep spend-access to their principal. To build it, we need:
-1. A staking key registered per account (separate from the ML-DSA payment lock).
-2. A delegation certificate signed by that key.
-3. Consensus (Aura author selection, reward weighting) reading stake from the delegation registry, not from UTXO ownership.
+1. Session key registration not tested end-to-end. Add integration test.
+2. Elected set can be smaller than MaxActiveValidators. No minimum-set enforcement.
+3. Mid-epoch stake changes take effect at next epoch boundary only. Document.
+4. No ejection rule — candidate stays elected until leave_candidates. Add in 9.5/9.6.
 
-That is a multi-session redesign — not in 8.7. Recorded here so the door stays open and (i) is understood as a stepping stone, not the final shape.
-
-## Phase status
-
-| Phase | Description | Status |
-|---|---|---|
-| 7.x | Anti-spam, weights, 7-validator Docker, TPS parity | done |
-| 8.1 | calibre-fees scaffold | done |
-| 8.2 | FeeHandler wired into qutxo | done |
-| 8.3 | Pool admission rejects under-priced txs | done |
-| 8.4 | Dynamic base fee (EIP-1559-style) | done |
-| 8.5 | Block rewards | done |
-| 8.6 | Producer payout routing | done |
-| 8.7 | Stake pallet (bond/unbond) | done |
-| 8.8 | Valid-witness test harness | **done** (with 8.7) |
-| 8.9 | Bench txs pay fees | **done** |
-
-## Open debt
-
-1. ~~**`qutxo::TotalIssuance` is stale** on the `execute_utxo_tx` path.~~ **RESOLVED `9b9d7af`.** Symmetric decrement/increment added; invariant restored; two tests (success + failure paths) using the real ML-DSA harness.
-2. ~~**`AuraFindAuthor` slot -> author math is not unit-tested.**~~ **RESOLVED `9b9d7af`.** Extracted `author_index_for_slot()` helper, 5 unit tests covering 0/1/7/21 authorities + u64::MAX. Trait-level digest-parsing integration test deferred to Phase 9.
-3. ~~**Treasury remains accounting-only.**~~ **RESOLVED `9b9d7af`.** Added `settle_treasury()` with threshold (Option C). Auto-settles in `on_finalize` when accumulator >= `MinTreasurySettle` (1,000 CAL) AND `TreasuryLock` is set. New `TreasurySettled` event. 3 tests.
-4. **`ProducerPending` exit semantics undocumented.** If a producer leaves the validator set with pending, it stays until they author again. Deliberate (no sweep, no governance call), but should be written down.
-5. **~~Bench txs pay zero fee.~~** RESOLVED. `tools/bench burst` subtracts a configurable fee (default 10_000 base units, override via 5th positional arg) from each output so `inputs > outputs`. Skips and reports UTXOs smaller than the fee rather than underflowing.
-6. **~~No valid-witness test harness.~~** RESOLVED. Real ML-DSA-44 keygen + sign in qutxo tests. `test_utxo_conservation_of_mass_and_double_spend` un-ignored; three fee-rejection E2E tests added with a configurable `TestFeeHandler`.
-7. **`/tmp/calibre-head` worktree check** confirmed `4e65e6f0` builds WASM clean — the earlier WASM failure was stale artifact from before the qutxo serde fix, not a real regression.
-
-## Next priorities
-
-1. **8.7 stake pallet** — `bond` / `unbond`, `Stake` ledger, `qutxo::consume_utxos_with_witness` helper. ~3-4h.
-2. **8.8 valid-witness test harness** — unblocks Phase 5 ignored test and the fee-rejection path E2E.
-3. **8.9 bench update** — bench txs must pay fees or 8.3 rejects them.
-4. **Push + tag** — session note update and push before next session.
-
-## Working rules
-
-- Stay in `~/calibre-template`.
-- Long heredocs get mangled — use `python3 - << 'PYEOF'`.
-- `git --no-pager` on every log/show/diff.
-- On Rust compile errors: `cargo build 2>&1 | head -60` to see the real cause, not the build-script wrapper.
-- `SKIP_WASM_BUILD=1` for fast iteration; full WASM build before commit.
