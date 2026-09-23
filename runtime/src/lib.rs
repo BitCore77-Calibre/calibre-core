@@ -205,6 +205,7 @@ impl pallet_qutxo::Config for Runtime {
 	type MaxTxInputs = QutxoMaxTxInputs;
 	type MaxTxOutputs = QutxoMaxTxOutputs;
 		type WeightInfo = pallet_qutxo::weights::SubstrateWeight<Runtime>;
+		type FeeHandler = CalibreFees;
 	}
 
 parameter_types! {

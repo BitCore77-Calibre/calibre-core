@@ -16,6 +16,7 @@ pub mod pallet {
     use frame_system::ensure_root;
     use calibre_aegis_crypto::AegisWitness;
     use crate::weights::WeightInfo;
+    use calibre_primitives::FeeHandler;
 
     #[pallet::pallet] pub struct Pallet<T>(_);
     #[pallet::config]
@@ -25,6 +26,8 @@ pub mod pallet {
         #[pallet::constant] type MaxTxInputs: Get<u32>;
         #[pallet::constant] type MaxTxOutputs: Get<u32>;
 		type WeightInfo: WeightInfo;
+		/// Fee router: () in tests, pallet-calibre-fees in the runtime.
+		type FeeHandler: FeeHandler<Self::AccountId, Self::Balance>;
 	}
     #[pallet::storage] #[pallet::getter(fn utxo_set)]
     pub type UtxoSet<T: Config> = StorageMap<_, Blake2_128Concat, sp_core::H256, Utxo<T::Balance>, OptionQuery>;
@@ -96,6 +99,10 @@ pub mod pallet {
             Self::mark_utxo_set_dirty();
             }
             ensure!(total_input_value >= total_output_value, Error::<T>::ValueMismatch);
+            let fee = total_input_value.saturating_sub(total_output_value);
+            if fee > T::Balance::default() {
+                let _ = T::FeeHandler::charge_fee(fee, None);
+            }
             Self::deposit_event(Event::TransactionExecuted { tx_hash, value: total_output_value });
             Ok(())
         }

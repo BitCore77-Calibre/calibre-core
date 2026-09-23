@@ -34,3 +34,26 @@ pub struct InclusionProof {
     pub value_hash: sp_core::H256,
     pub path: sp_std::vec::Vec<MerkleStep>,
 }
+
+/// Interface for routing UTXO transaction fees.
+///
+/// Consumed by `pallet-qutxo` in `execute_utxo_tx`. Implemented by
+/// `pallet-calibre-fees` in the runtime. `()` is a no-op that discards
+/// fees — used in unit tests that don't care about routing.
+pub trait FeeHandler<AccountId, Balance> {
+    /// Split a fee into (producer, treasury, burn) and record it.
+    fn charge_fee(fee: Balance, producer: Option<AccountId>) -> (Balance, Balance, Balance);
+
+    /// Minimum acceptable fee for a tx with N inputs and M outputs.
+    fn minimum_fee(inputs: u32, outputs: u32) -> Balance;
+}
+
+impl<AccountId, Balance: Default + Copy> FeeHandler<AccountId, Balance> for () {
+    fn charge_fee(_fee: Balance, _producer: Option<AccountId>) -> (Balance, Balance, Balance) {
+        let z = Balance::default();
+        (z, z, z)
+    }
+    fn minimum_fee(_inputs: u32, _outputs: u32) -> Balance {
+        Balance::default()
+    }
+}

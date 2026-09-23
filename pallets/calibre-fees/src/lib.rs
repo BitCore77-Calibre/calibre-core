@@ -7,17 +7,10 @@ mod tests;
 pub mod weights;
 pub use weights::WeightInfo;
 
-/// Interface used by pallet-qutxo to route fees without a hard dependency.
-pub trait FeeHandler<AccountId, Balance> {
-    /// Split and record a fee. Returns (producer_cut, treasury_cut, burn_cut).
-    fn charge_fee(fee: Balance, producer: Option<AccountId>) -> (Balance, Balance, Balance);
-    /// Minimum acceptable fee for a tx with N inputs, M outputs.
-    fn minimum_fee(inputs: u32, outputs: u32) -> Balance;
-}
-
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{FeeHandler, WeightInfo};
+    use crate::WeightInfo;
+    use calibre_primitives::FeeHandler;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::AtLeast32BitUnsigned;

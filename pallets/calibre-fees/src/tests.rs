@@ -4,6 +4,7 @@ use crate::{self as pallet_calibre_fees, *};
 use frame_support::{assert_ok, derive_impl, parameter_types};
 use frame_support::traits::ConstU32;
 use sp_runtime::BuildStorage;
+use calibre_primitives::FeeHandler;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 

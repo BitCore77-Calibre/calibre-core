@@ -65,6 +65,7 @@ impl pallet_qutxo::Config for Test {
     type MaxTxInputs = ConstU32<16>;
     type MaxTxOutputs = ConstU32<16>;
 	type WeightInfo = ();
+	type FeeHandler = ();
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
