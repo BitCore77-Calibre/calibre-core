@@ -41,6 +41,23 @@ pub mod pallet {
         #[pallet::constant]
         type PerInOutFee: Get<Self::Balance>;
 
+        /// Target block fullness as a percent of max block weight (e.g. 50).
+        /// Blocks above this raise the base fee; blocks below lower it.
+        #[pallet::constant]
+        type TargetBlockFullnessPct: Get<u8>;
+
+        /// Maximum base fee change per block, in percent (e.g. 12 = 12%).
+        #[pallet::constant]
+        type MaxBaseFeeChangePct: Get<u8>;
+
+        /// Minimum base fee. Base fee will never decay below this.
+        #[pallet::constant]
+        type MinBaseFee: Get<Self::Balance>;
+
+        /// Maximum base fee. Base fee will never rise above this.
+        #[pallet::constant]
+        type MaxBaseFee: Get<Self::Balance>;
+
         /// Percent of the fee routed to the block producer (0-100).
         #[pallet::constant]
         type ProducerFeeShare: Get<u8>;
@@ -69,6 +86,12 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn burn_counter)]
     pub type BurnCounter<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
+    /// Current dynamic base fee. Adjusted in `on_finalize` based on the
+    /// previous block's consumed weight. Read by `minimum_fee`.
+    #[pallet::storage]
+    #[pallet::getter(fn current_base_fee)]
+    pub type CurrentBaseFee<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -112,6 +135,15 @@ pub mod pallet {
             let t = T::TreasuryFeeShare::get() as u32;
             assert!(p + t <= 100, "ProducerFeeShare + TreasuryFeeShare must be <= 100");
             TreasuryLock::<T>::put(self.treasury_lock);
+            // Seed the dynamic base fee from the genesis constant.
+            CurrentBaseFee::<T>::put(T::BaseTxFee::get());
+        }
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_finalize(_n: BlockNumberFor<T>) {
+            Self::adjust_base_fee();
         }
     }
 
@@ -143,6 +175,47 @@ pub mod pallet {
     }
 
     impl<T: Config> Pallet<T> {
+        /// Adjust the dynamic base fee based on the current block's weight.
+        /// Called in `on_finalize`; sets the fee for the *next* block.
+        pub fn adjust_base_fee() {
+            let max_block = <T as frame_system::Config>::BlockWeights::get().max_block.ref_time();
+            if max_block == 0 {
+                return;
+            }
+
+            let actual = frame_system::Pallet::<T>::block_weight().total().ref_time();
+            let target_pct = T::TargetBlockFullnessPct::get() as u64;
+            let target = max_block.saturating_mul(target_pct) / 100;
+            if target == 0 {
+                return;
+            }
+
+            let current: u128 = CurrentBaseFee::<T>::get().into();
+            let step_pct = T::MaxBaseFeeChangePct::get() as u128;
+
+            let new_u128: u128 = if actual > target {
+                // Block over target: raise, scaled by how far over.
+                let over = (actual - target) as u128;
+                let over_ratio = (over.saturating_mul(100) / (target as u128)).min(100);
+                let change = step_pct.saturating_mul(over_ratio) / 100;
+                current.saturating_mul(100u128.saturating_add(change)) / 100
+            } else if actual < target {
+                // Block under target: lower, scaled by how far under.
+                let under = (target - actual) as u128;
+                let under_ratio = (under.saturating_mul(100) / (target as u128)).min(100);
+                let change = step_pct.saturating_mul(under_ratio) / 100;
+                current.saturating_mul(100u128.saturating_sub(change)) / 100
+            } else {
+                current
+            };
+
+            let floor: u128 = T::MinBaseFee::get().into();
+            let ceil: u128 = T::MaxBaseFee::get().into();
+            let clamped = new_u128.max(floor).min(ceil);
+
+            CurrentBaseFee::<T>::put(T::Balance::from(clamped));
+        }
+
         /// Compute the fee split for a given amount.
         /// Burn absorbs the remainder, so shares must satisfy producer+treasury <= 100.
         pub fn split(fee: T::Balance) -> (T::Balance, T::Balance, T::Balance) {
@@ -182,7 +255,7 @@ pub mod pallet {
         }
 
         fn minimum_fee(inputs: u32, outputs: u32) -> T::Balance {
-            let base: u128 = T::BaseTxFee::get().into();
+            let base: u128 = CurrentBaseFee::<T>::get().into();
             let per: u128 = T::PerInOutFee::get().into();
             let total = base.saturating_add(per.saturating_mul((inputs as u128).saturating_add(outputs as u128)));
             total.into()

@@ -3,6 +3,7 @@
 use crate::{self as pallet_calibre_fees, *};
 use frame_support::{assert_ok, derive_impl, parameter_types};
 use frame_support::traits::ConstU32;
+use frame_support::traits::Get;
 use sp_runtime::BuildStorage;
 use calibre_primitives::FeeHandler;
 
@@ -15,9 +16,18 @@ frame_support::construct_runtime!(
     }
 );
 
+parameter_types! {
+    pub RuntimeBlockWeights: frame_system::limits::BlockWeights =
+        frame_system::limits::BlockWeights::with_sensible_defaults(
+            frame_support::weights::Weight::from_parts(2_000_000_000_000, u64::MAX),
+            sp_runtime::Perbill::from_percent(75),
+        );
+}
+
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
     type Block = Block;
+    type BlockWeights = RuntimeBlockWeights;
 }
 
 parameter_types! {
@@ -25,6 +35,10 @@ parameter_types! {
     pub const PerInOutFee: u128 = 100;
     pub const ProducerFeeShare: u8 = 50;
     pub const TreasuryFeeShare: u8 = 30;
+    pub const TargetBlockFullnessPct: u8 = 50;
+    pub const MaxBaseFeeChangePct: u8 = 12;
+    pub const MinBaseFee: u128 = 500;
+    pub const MaxBaseFee: u128 = 1_000_000;
 }
 
 impl pallet_calibre_fees::Config for Test {
@@ -34,6 +48,10 @@ impl pallet_calibre_fees::Config for Test {
     type PerInOutFee = PerInOutFee;
     type ProducerFeeShare = ProducerFeeShare;
     type TreasuryFeeShare = TreasuryFeeShare;
+    type TargetBlockFullnessPct = TargetBlockFullnessPct;
+    type MaxBaseFeeChangePct = MaxBaseFeeChangePct;
+    type MinBaseFee = MinBaseFee;
+    type MaxBaseFee = MaxBaseFee;
     type WeightInfo = ();
 }
 
@@ -125,5 +143,82 @@ fn register_producer_lock_requires_root() {
 fn genesis_sets_treasury_lock() {
     new_test_ext().execute_with(|| {
         assert_eq!(TreasuryLock::<Test>::get(), [7u8; 32]);
+    });
+}
+
+// ── Phase 8.4 tests: dynamic base fee ──
+
+#[test]
+fn current_base_fee_seeded_from_genesis() {
+    new_test_ext().execute_with(|| {
+        assert_eq!(CurrentBaseFee::<Test>::get(), 1_000);
+    });
+}
+
+#[test]
+fn base_fee_rises_when_block_over_target() {
+    new_test_ext().execute_with(|| {
+        // Block at 100% weight: target is 50%, so it's 100% over target.
+        let max = <Test as frame_system::Config>::BlockWeights::get().max_block;
+        frame_system::Pallet::<Test>::register_extra_weight_unchecked(
+            max,
+            frame_support::dispatch::DispatchClass::Normal,
+        );
+        let initial = CurrentBaseFee::<Test>::get();
+        Fees::adjust_base_fee();
+        let after = CurrentBaseFee::<Test>::get();
+        assert!(after > initial, "base fee should rise: {} -> {}", initial, after);
+        // Full over-target = 100% of MaxBaseFeeChangePct = 12% rise
+        assert_eq!(after, 1_120);
+    });
+}
+
+#[test]
+fn base_fee_falls_when_block_under_target() {
+    new_test_ext().execute_with(|| {
+        // Empty block: 0% weight, target 50%. Deficit ratio capped at 100%.
+        let initial = CurrentBaseFee::<Test>::get();
+        Fees::adjust_base_fee();
+        let after = CurrentBaseFee::<Test>::get();
+        assert!(after < initial, "base fee should fall: {} -> {}", initial, after);
+        // 100% deficit capped, 12% drop
+        assert_eq!(after, 880);
+    });
+}
+
+#[test]
+fn base_fee_respects_floor() {
+    new_test_ext().execute_with(|| {
+        // Manually set to floor + small amount, then decay
+        CurrentBaseFee::<Test>::put(505);
+        Fees::adjust_base_fee();  // would drop 12% -> 444, clamp to 500
+        assert_eq!(CurrentBaseFee::<Test>::get(), 500);
+    });
+}
+
+#[test]
+fn base_fee_respects_ceiling() {
+    new_test_ext().execute_with(|| {
+        CurrentBaseFee::<Test>::put(999_000);
+        let max = <Test as frame_system::Config>::BlockWeights::get().max_block;
+        frame_system::Pallet::<Test>::register_extra_weight_unchecked(
+            max,
+            frame_support::dispatch::DispatchClass::Normal,
+        );
+        Fees::adjust_base_fee();
+        // 12% rise from 999k -> >1M, clamped
+        assert!(CurrentBaseFee::<Test>::get() <= 1_000_000);
+    });
+}
+
+#[test]
+fn minimum_fee_uses_dynamic_base() {
+    new_test_ext().execute_with(|| {
+        // Genesis: base = 1000, per_io = 100. min_fee(1,2) = 1000 + 300 = 1300
+        assert_eq!(Fees::minimum_fee(1, 2), 1_300);
+
+        // Raise base fee manually, verify min_fee tracks it
+        CurrentBaseFee::<Test>::put(2_000);
+        assert_eq!(Fees::minimum_fee(1, 2), 2_300);
     });
 }

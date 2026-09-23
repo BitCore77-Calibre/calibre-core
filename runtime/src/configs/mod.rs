@@ -172,6 +172,14 @@ parameter_types! {
 	pub const ProducerFeeShare: u8 = 50;
 	/// Percentage of fee routed to the treasury.
 	pub const TreasuryFeeShare: u8 = 30;
+	/// Target block fullness: 50% of max weight. Above → fee rises.
+	pub const TargetBlockFullnessPct: u8 = 50;
+	/// Max change per block: 12% (EIP-1559-flavored).
+	pub const MaxBaseFeeChangePct: u8 = 12;
+	/// Floor: base fee will never decay below this.
+	pub const MinBaseFee: Balance = 500;
+	/// Ceiling: base fee will never rise above this.
+	pub const MaxBaseFee: Balance = 1_000_000;
 }
 
 impl pallet_calibre_fees::Config for Runtime {
@@ -181,5 +189,9 @@ impl pallet_calibre_fees::Config for Runtime {
 	type PerInOutFee = PerInOutFee;
 	type ProducerFeeShare = ProducerFeeShare;
 	type TreasuryFeeShare = TreasuryFeeShare;
+	type TargetBlockFullnessPct = TargetBlockFullnessPct;
+	type MaxBaseFeeChangePct = MaxBaseFeeChangePct;
+	type MinBaseFee = MinBaseFee;
+	type MaxBaseFee = MaxBaseFee;
 	type WeightInfo = pallet_calibre_fees::weights::SubstrateWeight<Runtime>;
 }
