@@ -3,11 +3,37 @@
 use crate::{self as pallet_calibre_fees, *};
 use frame_support::{assert_ok, derive_impl, parameter_types};
 use frame_support::traits::ConstU32;
-use frame_support::traits::Get;
 use sp_runtime::BuildStorage;
 use calibre_primitives::FeeHandler;
 
 type Block = frame_system::mocking::MockBlock<Test>;
+
+// ── Phase 8.6 test recording state ──
+//
+// `RecordingMinter` captures every mint `settle_producer_payouts` performs so
+// tests can assert on producer delivery without wiring a real qutxo. The
+// author source is `NEXT_AUTHOR`, read by `TestFindAuthor` in `on_initialize`.
+thread_local! {
+    static MINTED: std::cell::RefCell<Vec<(u128, [u8; 32])>> =
+        std::cell::RefCell::new(Vec::new());
+    static NEXT_AUTHOR: std::cell::RefCell<Option<u64>> =
+        std::cell::RefCell::new(None);
+}
+
+pub struct RecordingMinter;
+impl calibre_primitives::FeeMinter<u128, [u8; 32]> for RecordingMinter {
+    fn mint_to_lock(value: u128, lock: [u8; 32]) {
+        MINTED.with(|m| m.borrow_mut().push((value, lock)));
+    }
+}
+
+fn take_minted() -> Vec<(u128, [u8; 32])> {
+    MINTED.with(|m| std::mem::take(&mut *m.borrow_mut()))
+}
+
+fn set_next_author(a: Option<u64>) {
+    NEXT_AUTHOR.with(|slot| *slot.borrow_mut() = a);
+}
 
 frame_support::construct_runtime!(
     pub enum Test {
@@ -42,6 +68,16 @@ parameter_types! {
     pub const BlockRewardPerBlock: u128 = 10_000;
 }
 
+pub struct TestFindAuthor;
+impl frame_support::traits::FindAuthor<u64> for TestFindAuthor {
+    fn find_author<'a, I>(_digests: I) -> Option<u64>
+    where
+        I: 'a + IntoIterator<Item = (sp_runtime::ConsensusEngineId, &'a [u8])>,
+    {
+        NEXT_AUTHOR.with(|slot| *slot.borrow())
+    }
+}
+
 impl pallet_calibre_fees::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type Balance = u128;
@@ -54,6 +90,8 @@ impl pallet_calibre_fees::Config for Test {
     type MinBaseFee = MinBaseFee;
     type MaxBaseFee = MaxBaseFee;
     type BlockRewardPerBlock = BlockRewardPerBlock;
+    type FindAuthor = TestFindAuthor;
+    type FeeMinter = RecordingMinter;
     type WeightInfo = ();
 }
 
@@ -65,6 +103,8 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     }
     .assimilate_storage(&mut t)
     .unwrap();
+    set_next_author(None);
+    let _ = take_minted();
     t.into()
 }
 
@@ -94,12 +134,12 @@ fn split_handles_non_divisible_amounts() {
 #[test]
 fn charge_fee_accumulates_treasury_and_burn() {
     new_test_ext().execute_with(|| {
-        let (p, t, b) = Fees::charge_fee(1_000, None);
+        let (p, t, b) = Fees::charge_fee(1_000);
         assert_eq!((p, t, b), (500, 300, 200));
         assert_eq!(TreasuryAccumulated::<Test>::get(), 300);
         assert_eq!(BurnCounter::<Test>::get(), 200);
 
-        Fees::charge_fee(1_000, None);
+        Fees::charge_fee(1_000);
         assert_eq!(TreasuryAccumulated::<Test>::get(), 600);
         assert_eq!(BurnCounter::<Test>::get(), 400);
     });
@@ -258,5 +298,131 @@ fn zero_block_reward_is_noop() {
         Fees::distribute_block_reward();
         let twice = TotalRewardsMinted::<Test>::get();
         assert_eq!(twice, once + 10_000, "reward should accumulate linearly");
+    });
+}
+
+// ── Phase 8.6 tests: producer payout settlement ──
+//
+// Q2(a) invariant: fees owed to a producer are never burned. If the author
+// has a registered lock, settle mints a UTXO. If not, the amount is held in
+// `ProducerPending[author]` and paid on a later block.
+
+use frame_support::traits::Hooks;
+
+/// Populate both accumulators. `base_fee_total` is the raw fee charged —
+/// the producer accumulator receives 50% of it (ProducerFeeShare). Treasury
+/// gets 30%, burn 20%, per `split_is_50_30_20`.
+fn seed_accumulators(base_fee_total: u128, priority_portion: u128) {
+    if base_fee_total > 0 {
+        Fees::charge_fee(base_fee_total);
+    }
+    if priority_portion > 0 {
+        Fees::charge_priority_fee(priority_portion);
+    }
+}
+
+fn author_pending(a: u64) -> u128 {
+    ProducerPending::<Test>::get(a)
+}
+
+#[test]
+fn on_initialize_captures_author() {
+    new_test_ext().execute_with(|| {
+        set_next_author(Some(7));
+        let _ = Fees::on_initialize(0);
+        assert_eq!(CurrentAuthor::<Test>::get(), Some(7));
+    });
+}
+
+#[test]
+fn settle_with_lock_mints_and_clears() {
+    new_test_ext().execute_with(|| {
+        set_next_author(Some(7));
+        let _ = Fees::on_initialize(0);
+
+        // 1000 base fee -> 500 producer cut; 500 priority.
+        seed_accumulators(1_000, 500);
+        assert_eq!(ProducerAccumulated::<Test>::get(), 500);
+        assert_eq!(PriorityFeeAccumulated::<Test>::get(), 500);
+
+        // Register a lock for the author.
+        assert_ok!(Fees::register_producer_lock(RuntimeOrigin::root(), 7u64, [9u8; 32]));
+
+        Fees::settle_producer_payouts();
+
+        assert_eq!(take_minted(), vec![(1_000, [9u8; 32])]);
+        assert_eq!(ProducerAccumulated::<Test>::get(), 0);
+        assert_eq!(PriorityFeeAccumulated::<Test>::get(), 0);
+        assert_eq!(author_pending(7), 0);
+    });
+}
+
+#[test]
+fn settle_without_lock_defers_and_never_burns() {
+    new_test_ext().execute_with(|| {
+        set_next_author(Some(7));
+        let _ = Fees::on_initialize(0);
+
+        seed_accumulators(1_000, 500);
+        // No `register_producer_lock` for author 7.
+
+        Fees::settle_producer_payouts();
+
+        assert!(take_minted().is_empty(), "must not mint without a lock");
+        assert_eq!(author_pending(7), 1_000, "payout held pending, not burned");
+        assert_eq!(ProducerAccumulated::<Test>::get(), 0);
+        assert_eq!(PriorityFeeAccumulated::<Test>::get(), 0);
+        // The 200 burn is the normal 20% split remainder — deferral does not\n        // add to it. What matters is that the 1000 owed to the producer was\n        // not destroyed: it lives in ProducerPending.
+        assert_eq!(BurnCounter::<Test>::get(), 200, "only the normal split burn");
+    });
+}
+
+#[test]
+fn settle_carries_pending_forward() {
+    new_test_ext().execute_with(|| {
+        // First block: no lock, 500 deferred.
+        set_next_author(Some(7));
+        let _ = Fees::on_initialize(0);
+        seed_accumulators(1_000, 0); // 500 producer cut
+        Fees::settle_producer_payouts();
+        assert_eq!(author_pending(7), 500);
+
+        // Register lock. Second block: earns another 500, settles 1000 total.
+        assert_ok!(Fees::register_producer_lock(RuntimeOrigin::root(), 7u64, [4u8; 32]));
+        let _ = Fees::on_initialize(1);
+        seed_accumulators(1_000, 0);
+        Fees::settle_producer_payouts();
+
+        assert_eq!(take_minted(), vec![(1_000, [4u8; 32])]);
+        assert_eq!(author_pending(7), 0);
+    });
+}
+
+#[test]
+fn settle_no_author_leaves_accumulators() {
+    new_test_ext().execute_with(|| {
+        // No author captured (NEXT_AUTHOR = None).
+        let _ = Fees::on_initialize(0);
+        seed_accumulators(1_000, 500);
+
+        Fees::settle_producer_payouts();
+
+        assert!(take_minted().is_empty());
+        assert_eq!(ProducerAccumulated::<Test>::get(), 500, "untouched");
+        assert_eq!(PriorityFeeAccumulated::<Test>::get(), 500, "untouched");
+    });
+}
+
+#[test]
+fn settle_zero_is_noop() {
+    new_test_ext().execute_with(|| {
+        set_next_author(Some(7));
+        let _ = Fees::on_initialize(0);
+        assert_ok!(Fees::register_producer_lock(RuntimeOrigin::root(), 7u64, [1u8; 32]));
+
+        Fees::settle_producer_payouts();
+
+        assert!(take_minted().is_empty());
+        assert_eq!(author_pending(7), 0);
     });
 }

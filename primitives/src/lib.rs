@@ -40,20 +40,36 @@ pub struct InclusionProof {
 /// Consumed by `pallet-qutxo` in `execute_utxo_tx`. Implemented by
 /// `pallet-calibre-fees` in the runtime. `()` is a no-op that discards
 /// fees — used in unit tests that don't care about routing.
-pub trait FeeHandler<AccountId, Balance> {
+pub trait FeeHandler<Balance> {
     /// Split a fee into (producer, treasury, burn) and record it.
-    fn charge_fee(fee: Balance, producer: Option<AccountId>) -> (Balance, Balance, Balance);
+    fn charge_fee(fee: Balance) -> (Balance, Balance, Balance);
 
     /// Minimum acceptable fee for a tx with N inputs and M outputs.
     fn minimum_fee(inputs: u32, outputs: u32) -> Balance;
+
+    /// Charge a priority fee (tip above base fee). Routes 100% to producer.
+    fn charge_priority_fee(fee: Balance) -> Balance;
 }
 
-impl<AccountId, Balance: Default + Copy> FeeHandler<AccountId, Balance> for () {
-    fn charge_fee(_fee: Balance, _producer: Option<AccountId>) -> (Balance, Balance, Balance) {
+impl<Balance: Default + Copy> FeeHandler<Balance> for () {
+    fn charge_fee(_fee: Balance) -> (Balance, Balance, Balance) {
         let z = Balance::default();
         (z, z, z)
     }
     fn minimum_fee(_inputs: u32, _outputs: u32) -> Balance {
         Balance::default()
     }
+    fn charge_priority_fee(_fee: Balance) -> Balance {
+        Balance::default()
+    }
+}
+
+/// Mint `value` into a UTXO locked to `lock`. Implemented by pallet-qutxo,
+/// consumed by pallet-calibre-fees to settle producer payouts at block end.
+pub trait FeeMinter<Balance, Lock> {
+    fn mint_to_lock(value: Balance, lock: Lock);
+}
+
+impl<Balance, Lock> FeeMinter<Balance, Lock> for () {
+    fn mint_to_lock(_value: Balance, _lock: Lock) {}
 }

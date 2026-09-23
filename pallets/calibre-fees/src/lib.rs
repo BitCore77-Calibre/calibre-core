@@ -10,7 +10,8 @@ pub use weights::WeightInfo;
 #[frame_support::pallet]
 pub mod pallet {
     use crate::WeightInfo;
-    use calibre_primitives::FeeHandler;
+    use calibre_primitives::{FeeHandler, FeeMinter};
+    use frame_support::traits::FindAuthor;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::AtLeast32BitUnsigned;
@@ -73,6 +74,13 @@ pub mod pallet {
         #[pallet::constant]
         type TreasuryFeeShare: Get<u8>;
 
+        /// Resolves the block author for producer payout routing.
+        type FindAuthor: frame_support::traits::FindAuthor<Self::AccountId>;
+
+        /// Mints the settled producer payout as a UTXO. pallet-qutxo in the
+        /// runtime; `()` in tests.
+        type FeeMinter: calibre_primitives::FeeMinter<Self::Balance, [u8; 32]>;
+
         /// Weight information for extrinsics in this pallet.
         type WeightInfo: WeightInfo;
     }
@@ -94,6 +102,16 @@ pub mod pallet {
     #[pallet::getter(fn burn_counter)]
     pub type BurnCounter<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
+    /// Producer's accumulated base fee cut (from 50/30/20 split). Minted as UTXO in on_finalize.
+    #[pallet::storage]
+    #[pallet::getter(fn producer_accumulated)]
+    pub type ProducerAccumulated<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
+    /// Priority fee accumulator (100% to producer). Minted as UTXO in on_finalize.
+    #[pallet::storage]
+    #[pallet::getter(fn priority_fee_accumulated)]
+    pub type PriorityFeeAccumulated<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
+
     /// Current dynamic base fee. Adjusted in `on_finalize` based on the
     /// previous block's consumed weight. Read by `minimum_fee`.
     #[pallet::storage]
@@ -105,6 +123,17 @@ pub mod pallet {
     #[pallet::getter(fn total_rewards_minted)]
     pub type TotalRewardsMinted<T: Config> = StorageValue<_, T::Balance, ValueQuery>;
 
+    /// Block author captured in `on_initialize`. Drives producer payout routing.
+    #[pallet::storage]
+    pub type CurrentAuthor<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
+
+    /// Producer payouts awaiting a registered lock (Q2(a): never burned).
+    /// Bounded by validator-set size. Cleared on successful mint.
+    #[pallet::storage]
+    #[pallet::getter(fn producer_pending)]
+    pub type ProducerPending<T: Config> =
+        StorageMap<_, Blake2_128Concat, T::AccountId, T::Balance, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -114,6 +143,8 @@ pub mod pallet {
             treasury: T::Balance,
             burned: T::Balance,
         },
+        /// Priority fee charged (100% to producer).
+        PriorityFeeCharged { amount: T::Balance },
         /// Block reward was minted and split.
         BlockRewardMinted {
             producer: T::Balance,
@@ -126,6 +157,10 @@ pub mod pallet {
             account: T::AccountId,
             lock: [u8; 32],
         },
+        /// Producer payout settled and minted as a UTXO.
+        ProducerPaid { account: T::AccountId, amount: T::Balance },
+        /// Producer payout deferred — no lock registered yet. Held pending.
+        ProducerPayoutDeferred { account: T::AccountId, amount: T::Balance },
     }
 
     #[pallet::error]
@@ -159,9 +194,21 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+        fn on_initialize(_n: BlockNumberFor<T>) -> Weight {
+            let author = T::FindAuthor::find_author(
+                frame_system::Pallet::<T>::digest()
+                    .logs
+                    .iter()
+                    .filter_map(|d| d.as_pre_runtime()),
+            );
+            CurrentAuthor::<T>::set(author);
+            T::DbWeight::get().reads_writes(1, 1)
+        }
+
         fn on_finalize(_n: BlockNumberFor<T>) {
             Self::adjust_base_fee();
             Self::distribute_block_reward();
+            Self::settle_producer_payouts();
         }
     }
 
@@ -205,10 +252,8 @@ pub mod pallet {
             }
 
             let reward_u128: u128 = reward.into();
-            let producer_pct = T::ProducerFeeShare::get() as u128;
             let treasury_pct = T::TreasuryFeeShare::get() as u128;
 
-            let producer_u128 = reward_u128.saturating_mul(producer_pct) / 100;
             let treasury_u128 = reward_u128.saturating_mul(treasury_pct) / 100;
 
             // Remaining % stays as producer cut in practice — all reward value
@@ -219,10 +264,11 @@ pub mod pallet {
             TreasuryAccumulated::<T>::mutate(|t| *t = t.saturating_add(treasury_cut));
             TotalRewardsMinted::<T>::mutate(|m| *m = m.saturating_add(reward));
 
-            let _ = producer_total_u128; // Phase 8.2b routes this
+            let producer_cut: T::Balance = producer_total_u128.into();
+            ProducerAccumulated::<T>::mutate(|p| *p = p.saturating_add(producer_cut));
 
             Self::deposit_event(Event::BlockRewardMinted {
-                producer: producer_total_u128.into(),
+                producer: producer_cut,
                 treasury: treasury_cut,
             });
         }
@@ -283,19 +329,13 @@ pub mod pallet {
         }
     }
 
-    impl<T: Config> FeeHandler<T::AccountId, T::Balance> for Pallet<T> {
-        fn charge_fee(
-            fee: T::Balance,
-            producer: Option<T::AccountId>,
-        ) -> (T::Balance, T::Balance, T::Balance) {
+    impl<T: Config> FeeHandler<T::Balance> for Pallet<T> {
+        fn charge_fee(fee: T::Balance) -> (T::Balance, T::Balance, T::Balance) {
             let (producer_cut, treasury_cut, burn_cut) = Self::split(fee);
 
             TreasuryAccumulated::<T>::mutate(|t| *t = t.saturating_add(treasury_cut));
             BurnCounter::<T>::mutate(|b| *b = b.saturating_add(burn_cut));
-
-            // Producer routing is recorded but not yet booked to a UTXO.
-            // Phase 8.2 wires this into a producer UTXO at block finalize.
-            let _ = producer;
+            ProducerAccumulated::<T>::mutate(|p| *p = p.saturating_add(producer_cut));
 
             Self::deposit_event(Event::FeeCharged {
                 producer: producer_cut,
@@ -309,8 +349,64 @@ pub mod pallet {
         fn minimum_fee(inputs: u32, outputs: u32) -> T::Balance {
             let base: u128 = CurrentBaseFee::<T>::get().into();
             let per: u128 = T::PerInOutFee::get().into();
-            let total = base.saturating_add(per.saturating_mul((inputs as u128).saturating_add(outputs as u128)));
+            let total = base
+                .saturating_add(per.saturating_mul((inputs as u128).saturating_add(outputs as u128)));
             total.into()
+        }
+
+        fn charge_priority_fee(fee: T::Balance) -> T::Balance {
+            if fee == T::Balance::default() {
+                return fee;
+            }
+            PriorityFeeAccumulated::<T>::mutate(|p| *p = p.saturating_add(fee));
+            Self::deposit_event(Event::PriorityFeeCharged { amount: fee });
+            fee
+        }
+    }
+
+    impl<T: Config> Pallet<T> {
+        /// Settle all producer earnings for this block into a single UTXO.
+        ///
+        /// Drains the two global accumulators (`ProducerAccumulated` from the
+        /// 50/30/20 split and block reward, `PriorityFeeAccumulated` from
+        /// priority tips) plus any carried `ProducerPending` for the author.
+        ///
+        /// Q2(a): if the author has no registered lock, the whole amount is
+        /// consolidated back into `ProducerPending[author]` and minted on a
+        /// later block once `register_producer_lock` has been called. Value is
+        /// never burned. Pending is keyed by account; the lock used at mint
+        /// time is whatever `ProducerLocks[author]` currently holds.
+        ///
+        /// Treasury stays accounting-only — no mint path for it in 8.6.
+        pub fn settle_producer_payouts() {
+            let author = match CurrentAuthor::<T>::get() {
+                Some(a) => a,
+                // No resolvable author this block: leave accumulators intact.
+                None => return,
+            };
+
+            let producer = ProducerAccumulated::<T>::take();
+            let priority = PriorityFeeAccumulated::<T>::take();
+            let carried = ProducerPending::<T>::get(&author);
+            let total = producer.saturating_add(priority).saturating_add(carried);
+            if total == T::Balance::default() {
+                return;
+            }
+
+            match ProducerLocks::<T>::get(&author) {
+                Some(lock) => {
+                    T::FeeMinter::mint_to_lock(total, lock);
+                    ProducerPending::<T>::remove(&author);
+                    Self::deposit_event(Event::ProducerPaid { account: author, amount: total });
+                }
+                None => {
+                    ProducerPending::<T>::insert(&author, total);
+                    Self::deposit_event(Event::ProducerPayoutDeferred {
+                        account: author,
+                        amount: total,
+                    });
+                }
+            }
         }
     }
 }

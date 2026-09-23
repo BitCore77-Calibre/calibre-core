@@ -185,6 +185,39 @@ parameter_types! {
 	pub const BlockRewardPerBlock: Balance = 5_300_000_000_000_000_000u128;
 }
 
+/// Resolve the Aura block author from the pre-runtime digest.
+///
+/// Aura's digest carries the slot index; the author is
+/// `Authorities[slot % n]`. Wired into calibre-fees as `FindAuthor` so
+/// producer payouts route to the block author without needing a separate
+/// pallet-authorship instance.
+pub struct AuraFindAuthor;
+impl frame_support::traits::FindAuthor<AccountId> for AuraFindAuthor {
+    fn find_author<'a, I>(digests: I) -> Option<AccountId>
+    where
+        I: 'a + IntoIterator<Item = (sp_runtime::ConsensusEngineId, &'a [u8])>,
+    {
+        use frame_support::pallet_prelude::Decode;
+        use sp_consensus_aura::AURA_ENGINE_ID;
+        use sp_core::crypto::ByteArray;
+        for (id, data) in digests {
+            if id == AURA_ENGINE_ID {
+                let authorities = pallet_aura::Authorities::<Runtime>::get();
+                if authorities.is_empty() {
+                    return None;
+                }
+                if let Ok(slot) = u64::decode(&mut &data[..]) {
+                    let idx = (slot % authorities.len() as u64) as usize;
+                    let authority = authorities.get(idx).cloned()?;
+                    let bytes: [u8; 32] = authority.to_raw_vec().try_into().ok()?;
+                    return Some(sp_runtime::AccountId32::from(bytes).into());
+                }
+            }
+        }
+        None
+    }
+}
+
 impl pallet_calibre_fees::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
@@ -197,5 +230,7 @@ impl pallet_calibre_fees::Config for Runtime {
 	type MinBaseFee = MinBaseFee;
 	type MaxBaseFee = MaxBaseFee;
 	type BlockRewardPerBlock = BlockRewardPerBlock;
+	type FindAuthor = AuraFindAuthor;
+	type FeeMinter = crate::Qutxo;
 	type WeightInfo = pallet_calibre_fees::weights::SubstrateWeight<Runtime>;
 }

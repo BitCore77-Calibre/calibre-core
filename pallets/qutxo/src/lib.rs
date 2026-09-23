@@ -22,12 +22,13 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        type Balance: Member + Parameter + AtLeast32BitUnsigned + Default + Copy + MaxEncodedLen;
+        type Balance: Member + Parameter + AtLeast32BitUnsigned + Default + Copy + MaxEncodedLen
+            + serde::Serialize + serde::de::DeserializeOwned;
         #[pallet::constant] type MaxTxInputs: Get<u32>;
         #[pallet::constant] type MaxTxOutputs: Get<u32>;
 		type WeightInfo: WeightInfo;
 		/// Fee router: () in tests, pallet-calibre-fees in the runtime.
-		type FeeHandler: FeeHandler<Self::AccountId, Self::Balance>;
+		type FeeHandler: FeeHandler<Self::Balance>;
 	}
     #[pallet::storage] #[pallet::getter(fn utxo_set)]
     pub type UtxoSet<T: Config> = StorageMap<_, Blake2_128Concat, sp_core::H256, Utxo<T::Balance>, OptionQuery>;
@@ -99,9 +100,18 @@ pub mod pallet {
             Self::mark_utxo_set_dirty();
             }
             ensure!(total_input_value >= total_output_value, Error::<T>::ValueMismatch);
-            let fee = total_input_value.saturating_sub(total_output_value);
-            if fee > T::Balance::default() {
-                let _ = T::FeeHandler::charge_fee(fee, None);
+            let total_fee = total_input_value.saturating_sub(total_output_value);
+            if total_fee > T::Balance::default() {
+                let base_fee = T::FeeHandler::minimum_fee(tx.inputs.len() as u32, tx.outputs.len() as u32);
+                let priority_fee = total_fee.saturating_sub(base_fee);
+                
+                // Route base fee through 50/30/20 split
+                let _ = T::FeeHandler::charge_fee(base_fee);
+                
+                // Route priority fee 100% to producer
+                if priority_fee > T::Balance::default() {
+                    let _ = T::FeeHandler::charge_priority_fee(priority_fee);
+                }
             }
             Self::deposit_event(Event::TransactionExecuted { tx_hash, value: total_output_value });
             Ok(())
@@ -110,29 +120,7 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::sudo_mint())]
         pub fn sudo_mint(origin: OriginFor<T>, value: T::Balance, recipient_lock: [u8; 32]) -> DispatchResult {
             ensure_root(origin)?;
-            // Create a deterministic genesis hash for the first UTXO
-            let mut seed = Vec::new();
-            seed.extend_from_slice(b"calibre-mint");
-            seed.extend_from_slice(&frame_system::Pallet::<T>::block_number().encode());
-            // Include recipient in the seed so multiple mints in one block
-            // produce distinct UTXOs. Without this, two recipients funded
-            // in the same block collide on the same utxo_hash and the
-            // second overwrites the first.
-            seed.extend_from_slice(&recipient_lock);
-            let genesis_hash = sp_core::H256::from(sp_core::blake2_256(&seed));
-            let utxo_hash = Self::calculate_utxo_hash(genesis_hash, 0);
-            
-            let new_utxo = Utxo { 
-                value, 
-                lock: QuantumLock::AegisThreshold(recipient_lock) // Post-quantum lock bound to recipient
-            };
-            
-            // Inject into state and update total issuance
-            UtxoSet::<T>::insert(utxo_hash, new_utxo);
-            Self::mark_utxo_set_dirty();
-            let current = TotalIssuance::<T>::get();
-            TotalIssuance::<T>::put(current.saturating_add(value));
-            
+            let genesis_hash = Self::mint_utxo(value, recipient_lock);
             Self::deposit_event(Event::TransactionExecuted { tx_hash: genesis_hash, value });
             Ok(())
         }
@@ -197,6 +185,26 @@ pub mod pallet {
         /// Call from every path that mutates `UtxoSet`.
         pub fn mark_utxo_set_dirty() {
             UtxoSetDirty::<T>::put(true);
+        }
+
+        /// Mint a UTXO locked to `recipient_lock` and return its genesis hash.
+        /// Used by `sudo_mint` and by pallet-calibre-fees' producer payout settle.
+        pub fn mint_utxo(value: T::Balance, recipient_lock: [u8; 32]) -> sp_core::H256 {
+            let mut seed = Vec::new();
+            seed.extend_from_slice(b"calibre-mint");
+            seed.extend_from_slice(&frame_system::Pallet::<T>::block_number().encode());
+            seed.extend_from_slice(&recipient_lock);
+            let genesis_hash = sp_core::H256::from(sp_core::blake2_256(&seed));
+            let utxo_hash = Self::calculate_utxo_hash(genesis_hash, 0);
+            let new_utxo = Utxo {
+                value,
+                lock: QuantumLock::AegisThreshold(recipient_lock),
+            };
+            UtxoSet::<T>::insert(utxo_hash, new_utxo);
+            Self::mark_utxo_set_dirty();
+            let current = TotalIssuance::<T>::get();
+            TotalIssuance::<T>::put(current.saturating_add(value));
+            genesis_hash
         }
 
         pub fn calculate_utxo_hash(tx_hash: sp_core::H256, output_index: u32) -> sp_core::H256 {
@@ -313,5 +321,35 @@ pub mod pallet {
             builder.build()
         }
     }
+
+    #[pallet::genesis_config]
+    #[derive(frame_support::DefaultNoBound)]
+    pub struct GenesisConfig<T: Config> {
+        pub initial_utxos: Vec<(sp_core::H256, T::Balance, [u8; 32])>,
+        #[serde(skip)]
+        pub _config: sp_std::marker::PhantomData<T>,
+    }
+
+    #[pallet::genesis_build]
+    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+        fn build(&self) {
+            let mut total = T::Balance::default();
+            for (hash, value, lock_bytes) in &self.initial_utxos {
+                let utxo = Utxo {
+                    value: *value,
+                    lock: calibre_primitives::QuantumLock::AegisThreshold(*lock_bytes),
+                };
+                UtxoSet::<T>::insert(hash, utxo);
+                total = total.saturating_add(*value);
+            }
+            TotalIssuance::<T>::put(total);
+        }
+    }
+
 }
 
+impl<T: pallet::Config> calibre_primitives::FeeMinter<T::Balance, [u8; 32]> for pallet::Pallet<T> {
+    fn mint_to_lock(value: T::Balance, lock: [u8; 32]) {
+        let _ = Self::mint_utxo(value, lock);
+    }
+}
