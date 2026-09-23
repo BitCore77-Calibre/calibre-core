@@ -739,7 +739,11 @@
         <li><b>HTTP faucet</b><span>POST pubkey → 1B CAL locked to that key</span></li>
         <li><b>Docker deployment</b><span>docker compose up launches node + faucet + Prometheus</span></li>
         <li><b>Whitepaper + diagrams</b><span>4-part spec, 6 architecture diagrams</span></li>
-        <li><b>7-authority chain spec</b><span>n=7 f=2 BFT spec committed</span></li>
+        <li><b>7-authority chain spec</b><span>n=7 f=2 BFT spec committed and verified on Docker</span></li>
+        <li><b>Fee market</b><span>EIP-1559-style dynamic base fee, 50/30/20 split, block rewards</span></li>
+        <li><b>Producer payout routing</b><span>fees and rewards mint to producer UTXO at block end; unregistered producers accrue pending, never burned</span></li>
+        <li><b>Stake pallet</b><span>bond/unbond with a burn-and-record ledger</span></li>
+        <li><b>Real ML-DSA-44 test harness</b><span>keygen + sign in tests; Phase 5 conservation test un-ignored</span></li>
       </ul>
     </div>
 
@@ -749,9 +753,9 @@
         IN PROGRESS
       </div>
       <ul class="reality-list">
-        <li><b>Multi-validator launcher</b><span>chain spec ready; launcher blocked on Substrate import-worker panic on non-first validators</span></li>
-        <li><b>Benchmark-derived weights</b><span>current weights are hardcoded; benchmark suite is Phase 8</span></li>
+        <li><b>Full benchmark suite</b><span>hand-derived weights in place; frame-benchmarking regeneration pending</span></li>
         <li><b>try-runtime migrations</b><span>runtime upgrades not yet supported; needed before mainnet</span></li>
+        <li><b>Light-client state proofs</b><span>on-chain ZK verifier shipped; succinct per-block proofs pending</span></li>
       </ul>
 
       <div class="reality-head planned-head">
@@ -1055,27 +1059,35 @@
         <div class="tl-status shipped">shipped</div>
       </div>
     </div>
-    <div class="tl-item next">
+    <div class="tl-item done">
       <div class="tl-marker">6.6</div>
       <div class="tl-body">
         <h3>Multi-validator testnet</h3>
-        <p>7 authorities (n=7 f=2). Chain-spec committed. Launcher deferred pending a Substrate import-worker fix.</p>
-        <div class="tl-status progress">in progress</div>
+        <p>7 authorities (n=7 f=2) on Docker. GRANDPA finality engaged at the 5/7 threshold; 1s RTT survived; 169 TPS parity single vs multi-validator.</p>
+        <div class="tl-status shipped">shipped</div>
       </div>
     </div>
-    <div class="tl-item plan">
+    <div class="tl-item done">
+      <div class="tl-marker">6.7</div>
+      <div class="tl-body">
+        <h3>Fee market + staking</h3>
+        <p>EIP-1559-style dynamic base fee · 50/30/20 fee split · block rewards · priority fees routed 100% to producer · bond/unbond stake pallet · producer payout routing at block end.</p>
+        <div class="tl-status shipped">shipped</div>
+      </div>
+    </div>
+    <div class="tl-item next">
       <div class="tl-marker">7</div>
       <div class="tl-body">
         <h3>Light nodes + ZK state proofs</h3>
-        <p>Succinct per-block state proofs. Mobile devices verify chain state without downloading the blockchain.</p>
-        <div class="tl-status planned">planned</div>
+        <p>On-chain RISC Zero verifier shipped (risc0-zkvm 3.0.6, verified end-to-end). Succinct per-block state proofs and mobile light-client verification pending.</p>
+        <div class="tl-status progress">in progress</div>
       </div>
     </div>
     <div class="tl-item plan">
       <div class="tl-marker">8</div>
       <div class="tl-body">
         <h3>Audit preparation</h3>
-        <p>Benchmark-derived weights · fuzz targets for crypto and UTXO · try-runtime migrations · third-party audit · bug bounty.</p>
+        <p>Full benchmark-derived weights (hand-derived constants landed in Phase 8.9) · fuzz targets for crypto and UTXO · try-runtime migrations · third-party audit · bug bounty.</p>
         <div class="tl-status planned">planned</div>
       </div>
     </div>
