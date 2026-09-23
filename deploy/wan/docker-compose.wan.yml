@@ -1,0 +1,149 @@
+# Cross-host WAN deployment.
+#
+# Each host runs a subset of validators, selected via COMPOSE_PROFILES.
+# Example: on a host running v1, v2, v3:
+#   COMPOSE_PROFILES=v1,v2,v3 docker compose -f docker-compose.wan.yml up -d
+#
+# Bootnode address is injected from .env (BOOTNODE_ADDR).
+
+x-validator-defaults: &validator-defaults
+  image: calibre-node:staging
+  restart: unless-stopped
+  networks:
+    - calibre-wan
+  cap_add:
+    - NET_ADMIN
+  deploy:
+    resources:
+      limits:
+        cpus: '1.0'
+        memory: 1G
+
+services:
+  v1:
+    <<: *validator-defaults
+    profiles: ["v1"]
+    container_name: calibre-v1
+    hostname: v1
+    environment:
+      VALIDATOR_NAME: v1
+      KEYRING: Alice
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+    ports:
+      - "30333:30333"
+      - "9944:9944"
+    volumes:
+      - v1-data:/data
+      - ./secrets/v1-network-key:/seed/v1-network-key:ro
+
+  v2:
+    <<: *validator-defaults
+    profiles: ["v2"]
+    container_name: calibre-v2
+    hostname: v2
+    environment:
+      VALIDATOR_NAME: v2
+      KEYRING: Bob
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v2-data:/data
+
+  v3:
+    <<: *validator-defaults
+    profiles: ["v3"]
+    container_name: calibre-v3
+    hostname: v3
+    environment:
+      VALIDATOR_NAME: v3
+      KEYRING: Charlie
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v3-data:/data
+
+  v4:
+    <<: *validator-defaults
+    profiles: ["v4"]
+    container_name: calibre-v4
+    hostname: v4
+    environment:
+      VALIDATOR_NAME: v4
+      KEYRING: Dave
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v4-data:/data
+
+  v5:
+    <<: *validator-defaults
+    profiles: ["v5"]
+    container_name: calibre-v5
+    hostname: v5
+    environment:
+      VALIDATOR_NAME: v5
+      KEYRING: Eve
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v5-data:/data
+
+  v6:
+    <<: *validator-defaults
+    profiles: ["v6"]
+    container_name: calibre-v6
+    hostname: v6
+    environment:
+      VALIDATOR_NAME: v6
+      KEYRING: Ferdie
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v6-data:/data
+
+  v7:
+    <<: *validator-defaults
+    profiles: ["v7"]
+    container_name: calibre-v7
+    hostname: v7
+    environment:
+      VALIDATOR_NAME: v7
+      KEYRING: One
+      CHAIN: staging
+      P2P_PORT: "30333"
+      RPC_PORT: "9944"
+      PROM_PORT: "9615"
+      BOOTNODE: ${BOOTNODE_ADDR}
+    volumes:
+      - v7-data:/data
+
+networks:
+  calibre-wan:
+    driver: bridge
+
+volumes:
+  v1-data:
+  v2-data:
+  v3-data:
+  v4-data:
+  v5-data:
+  v6-data:
+  v7-data:
