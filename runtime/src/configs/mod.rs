@@ -182,7 +182,7 @@ parameter_types! {
 	pub const MaxBaseFee: Balance = 1_000_000;
 	/// Block reward minted per block: 10 CAL = 10_000_000_000_000_000_000 units (18 decimals).
 	/// Tunable down over time by governance.
-	pub const BlockRewardPerBlock: Balance = 10_000_000_000_000_000_000u128;
+	pub const BlockRewardPerBlock: Balance = 5_300_000_000_000_000_000u128;
 }
 
 impl pallet_calibre_fees::Config for Runtime {
