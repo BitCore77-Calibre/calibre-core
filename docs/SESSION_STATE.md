@@ -44,6 +44,63 @@ per-block fixed overhead (~0.7s) dominates short slots. Keep 6s.
 The "99.9% proof_size" claim in the prior handoff was mislabeled —
 proof_size is u64::MAX here; the binding limit was block byte length.
 
+## Just shipped (this session, Phase 8.1 -> 8.3)
+
+### 8.1 — pallet-calibre-fees scaffold  (06766f93)
+- New pallet `pallets/calibre-fees` with FeeHandler trait, storage
+  (TreasuryLock, ProducerLocks, TreasuryAccumulated, BurnCounter),
+  extrinsics (set_treasury_lock, register_producer_lock), genesis config.
+- Fee split logic: 50% producer / 30% treasury / 20% burn.
+- minimum_fee scales with inputs + outputs.
+- Wired into runtime as pallet_index(10).
+- Design doc: docs/FEE_MARKET.md (seven locked decisions).
+- 9 tests green.
+
+### 8.2 — wire FeeHandler into qutxo  (530cfcec)
+- FeeHandler trait moved to calibre-primitives (single source of truth).
+- pallet-qutxo::Config gains type FeeHandler: FeeHandler<AccountId, Balance>.
+- execute_utxo_tx captures implicit fee (inputs - outputs) and calls
+  T::FeeHandler::charge_fee — value is no longer silently destroyed.
+- Runtime wires CalibreFees.
+- 17 qutxo + 9 calibre-fees tests green.
+
+### 8.3 — reject under-priced txs at pool  (875c75a9)
+- validate_unsigned computes implicit fee and rejects with
+  InvalidTransaction::Payment if below minimum_fee.
+- Complements crypto anti-spam: no more zero-fee pool junk.
+- 17 qutxo tests still green.
+
+## Open items / known debt
+
+1. qutxo::TotalIssuance storage is stale — never updated by execute_utxo_tx.
+   Either wire it or remove it. Phase 8.x.
+2. Producer argument to charge_fee is always None. The 50% producer cut is
+   computed but not routed. Needs pallet-authorship integration. Phase 8.2b.
+3. Bench txs pay zero fee (inputs == outputs). With 8.3 live, next burst
+   will fail with pool-rejected. Either bump bench to leave a fee, or zero
+   the BaseTxFee/PerInOutFee constants for bench runs.
+4. No end-to-end test for the fee rejection path — needs a valid ML-DSA
+   witness in the test harness. Same debt as the ignored Phase 5 test.
+   Doing the harness un-ignores both.
+
+## Phase 8 remaining
+
+- 8.2b — producer routing via pallet-authorship
+- 8.4  — dynamic base fee (EIP-1559 style)
+- 8.5  — block rewards (treasury-funded)
+- 8.6  — priority fee (optional producer-routed output)
+- 8.7  — stake pallet (bond/unbond only)
+- 8.8  — valid-witness test harness (un-ignores Phase 5 test)
+- 8.9  — bench update to pay fees
+
+## Where we are overall
+
+Phase 7.5 complete: anti-spam, honest weights, 7-validator Docker
+testnet, WAN-equivalent latency tolerance (1s RTT), throughput parity
+(169 TPS single vs multi).
+Phase 8.1-8.3 complete: fee market scaffold, fee capture in qutxo,
+fee-aware pool admission.
+
 ## Next (priorities)
 1. Multi-validator Docker — containerize 7 validators, docker-compose
    on one bridge, then tc netem latency injection. Deliverable:
