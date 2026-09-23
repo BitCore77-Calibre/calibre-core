@@ -278,6 +278,29 @@ pub mod pallet {
                 return InvalidTransaction::BadProof.into();
             }
 
+            // ── FEE CHECK (pool-side minimum fee) ──
+            // Reconstruct what execute_utxo_tx will compute. Reject under-priced
+            // txs here so the pool can't be flooded with zero-fee junk.
+            let mut total_in = T::Balance::default();
+            for input in tx.inputs.iter() {
+                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
+                if let Some(u) = UtxoSet::<T>::get(&id) {
+                    total_in = total_in.saturating_add(u.value);
+                }
+            }
+            let mut total_out = T::Balance::default();
+            for out in tx.outputs.iter() {
+                total_out = total_out.saturating_add(out.value);
+            }
+            let fee = total_in.saturating_sub(total_out);
+            let min_fee = T::FeeHandler::minimum_fee(
+                tx.inputs.len() as u32,
+                tx.outputs.len() as u32,
+            );
+            if fee < min_fee {
+                return InvalidTransaction::Payment.into();
+            }
+
             // ── PROVIDES (pool dedup per UTXO) ──
             let mut builder = ValidTransaction::with_tag_prefix("QUTXO")
                 .priority(100)
