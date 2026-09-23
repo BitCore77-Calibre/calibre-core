@@ -6884,6 +6884,7 @@ dependencies = [
  "calibre-aegis-crypto",
  "calibre-merkle",
  "calibre-primitives",
+ "dilithium-rs",
  "frame-support",
  "frame-system",
  "parity-scale-codec",

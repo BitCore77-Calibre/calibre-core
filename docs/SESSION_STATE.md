@@ -3,8 +3,8 @@
 ## Where we are
 
 - **Commit:** `16da3d67` (local, not pushed — `origin/main` at `4e65e6f0`)
-- **Phase:** 8.6 complete. Next: 8.7 (stake pallet).
-- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> 54 passed, 1 ignored (pre-existing Phase 5 regression).
+- **Phase:** 8.6, 8.7, 8.8 complete; Phase 5 test un-ignored. Next: 8.9 (bench pays fees).
+- **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> 68 passed, 0 ignored.
 
 ## Locked this session
 
@@ -44,8 +44,8 @@ That is a multi-session redesign — not in 8.7. Recorded here so the door stays
 | 8.4 | Dynamic base fee (EIP-1559-style) | done |
 | 8.5 | Block rewards | done |
 | 8.6 | Producer payout routing | done |
-| 8.7 | Stake pallet (bond/unbond) | **next** |
-| 8.8 | Valid-witness test harness | todo |
+| 8.7 | Stake pallet (bond/unbond) | done |
+| 8.8 | Valid-witness test harness | **done** (with 8.7) |
 | 8.9 | Bench txs pay fees | todo |
 
 ## Open debt
@@ -55,7 +55,7 @@ That is a multi-session redesign — not in 8.7. Recorded here so the door stays
 3. **Treasury remains accounting-only.** `TreasuryAccumulated` is written but never minted. Treasury withdrawal (governance-gated) is a future concern.
 4. **`ProducerPending` exit semantics undocumented.** If a producer leaves the validator set with pending, it stays until they author again. Deliberate (no sweep, no governance call), but should be written down.
 5. **Bench txs pay zero fee.** With 8.3 live, next bench burst will fail pool admission. Fix in 8.9.
-6. **No valid-witness test harness.** Same debt as the ignored Phase 5 test; un-ignores two tests. Phase 8.8.
+6. **~~No valid-witness test harness.~~** RESOLVED. Real ML-DSA-44 keygen + sign in qutxo tests. `test_utxo_conservation_of_mass_and_double_spend` un-ignored; three fee-rejection E2E tests added with a configurable `TestFeeHandler`.
 7. **`/tmp/calibre-head` worktree check** confirmed `4e65e6f0` builds WASM clean — the earlier WASM failure was stale artifact from before the qutxo serde fix, not a real regression.
 
 ## Next priorities

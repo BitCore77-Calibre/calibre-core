@@ -22,3 +22,6 @@ std = ["parity-scale-codec/std", "scale-info/std", "frame-support/std", "frame-s
 
 [dev-dependencies]
 sp-io = { workspace = true, features = ["std"] }
+# Real ML-DSA-44 keygen + signing for tests that exercise the full
+# AEGIS verification path. Must match the version aegis-crypto uses.
+dilithium-rs = { version = "0.4", features = ["std"] }

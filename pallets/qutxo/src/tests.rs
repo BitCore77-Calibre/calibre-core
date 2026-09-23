@@ -8,7 +8,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, IdentityLookup},
     BuildStorage,
 };
-use calibre_primitives::{QuantumLock, Utxo, TransactionInput, TransactionOutput};
+use calibre_primitives::{FeeHandler, QuantumLock, Utxo, TransactionInput, TransactionOutput};
 use calibre_aegis_crypto::{AegisWitness, DeviceAttestation};
 use parity_scale_codec::Encode;
 use sp_runtime::traits::Hash;
@@ -65,10 +65,34 @@ impl pallet_qutxo::Config for Test {
     type MaxTxInputs = ConstU32<16>;
     type MaxTxOutputs = ConstU32<16>;
 	type WeightInfo = ();
-	type FeeHandler = ();
+	type FeeHandler = TestFeeHandler;
+}
+
+thread_local! {
+    /// Minimum fee returned by the test FeeHandler. Tests that exercise the
+    /// pool-side fee check set this; the default 0 lets existing tests run
+    /// untouched (no tx is ever "under-priced" by default).
+    static MIN_FEE: std::cell::RefCell<u128> = std::cell::RefCell::new(0);
+}
+
+/// Test FeeHandler. Replaces `()` so the pool-admission fee check is
+/// exercisable end-to-end. `charge_fee` and `charge_priority_fee` are no-ops
+/// (they don't affect validate_unsigned, which only reads `minimum_fee`).
+pub struct TestFeeHandler;
+impl FeeHandler<u128> for TestFeeHandler {
+    fn charge_fee(_fee: u128) -> (u128, u128, u128) { (0, 0, 0) }
+    fn minimum_fee(_inputs: u32, _outputs: u32) -> u128 {
+        MIN_FEE.with(|m| *m.borrow())
+    }
+    fn charge_priority_fee(_fee: u128) -> u128 { 0 }
+}
+
+fn set_min_fee(f: u128) {
+    MIN_FEE.with(|m| *m.borrow_mut() = f);
 }
 
 pub fn new_test_ext() -> sp_io::TestExternalities {
+    set_min_fee(0);
     let t = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
@@ -89,36 +113,77 @@ fn mock_witness() -> Vec<u8> {
     w.encode()
 }
 
+/// Real ML-DSA-44 keypair, real signature, real AegisThreshold lock.
+///
+/// Signs `(inputs, outputs).encode()` with an empty context, matching the
+/// payload built inside `execute_utxo_tx` and the verification convention in
+/// `calibre_aegis_crypto::verify_aegis_transaction` (which uses ctx = b"").
+///
+/// Returns `(lock, tx)` where `lock` is the `AegisThreshold` the caller must
+/// place on the input UTXO — the verifier hashes `pub_keys[0]` and compares
+/// to the lock, so they must be paired.
+fn real_signed_tx(
+    inputs: Vec<TransactionInput>,
+    outputs: Vec<TransactionOutput<u128>>,
+) -> (QuantumLock, Transaction<u128>) {
+    let kp = dilithium::MlDsaKeyPair::generate(dilithium::ML_DSA_44).expect("keygen");
+    let pk_bytes = kp.public_key().to_vec();
+    let lock_bytes = sp_core::hashing::blake2_256(&pk_bytes);
+
+    let msg = (inputs.clone(), outputs.clone()).encode();
+    let sig = kp.sign(&msg, b"").expect("sign");
+
+    let witness = AegisWitness {
+        pub_keys: vec![pk_bytes],
+        aggregated_signature: sig.as_bytes().to_vec(),
+        attestation: DeviceAttestation {
+            hardware_signature: vec![],
+            app_binary_hash: [0; 32],
+            backend_challenge: [0; 32],
+        },
+        time_drift: 0,
+    };
+
+    (
+        QuantumLock::AegisThreshold(lock_bytes),
+        Transaction {
+            inputs,
+            outputs,
+            pq_signature: vec![],
+            witness: witness.encode(),
+        },
+    )
+}
+
 #[test]
-#[ignore = "Phase 5 regression: mock_witness() returns empty sig; real ML-DSA-44 verify correctly rejects. Fix in dedicated Phase 5.x commit."]
 fn test_utxo_conservation_of_mass_and_double_spend() {
     new_test_ext().execute_with(|| {
-        // 1. Setup: Manually inject a Genesis UTXO with 100 $CAL into the state
+        // 1. Build the real signed transaction first, so we know the
+        //    AegisThreshold lock the genesis UTXO must carry (it must match
+        //    blake2_256(pubkey) of the signer).
         let genesis_tx_hash = H256::from([1u8; 32]);
         let genesis_utxo_hash = Qutxo::calculate_utxo_hash(genesis_tx_hash, 0);
-        
-        let genesis_utxo = Utxo {
-            value: 100,
-            lock: QuantumLock::SingleSig([0u8; 32]),
-        };
-        UtxoSet::<Test>::insert(genesis_utxo_hash, genesis_utxo.clone());
+
+        let inputs = vec![TransactionInput {
+            tx_hash: genesis_tx_hash,
+            output_index: 0,
+        }];
+        let outputs = vec![
+            TransactionOutput { value: 60, lock: QuantumLock::SingleSig([2u8; 32]) },
+            TransactionOutput { value: 40, lock: QuantumLock::SingleSig([3u8; 32]) },
+        ];
+        let (input_lock, valid_tx) = real_signed_tx(inputs, outputs);
+
+        // 2. Inject the genesis UTXO with the matching lock.
+        UtxoSet::<Test>::insert(
+            genesis_utxo_hash,
+            Utxo { value: 100, lock: input_lock },
+        );
         TotalIssuance::<Test>::put(100);
 
-        // Verify it exists
         assert_eq!(UtxoSet::<Test>::get(genesis_utxo_hash).unwrap().value, 100);
 
-        // 2. Create a valid transaction spending the Genesis UTXO
-        let valid_tx = Transaction {
-            inputs: vec![TransactionInput { tx_hash: genesis_tx_hash, output_index: 0 }],
-            outputs: vec![
-                TransactionOutput { value: 60, lock: QuantumLock::SingleSig([2u8; 32]) },
-                TransactionOutput { value: 40, lock: QuantumLock::SingleSig([3u8; 32]) }, // 60 + 40 = 100 (Conservation holds)
-            ],
-            pq_signature: vec![],
-            witness: mock_witness(),
-        };
-
-        // Execute the valid transaction
+        // Execute the valid transaction.
         assert_ok!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), valid_tx.clone()));
 
         // 3. Verify state transition: Old UTXO is destroyed, new ones are created
@@ -397,5 +462,78 @@ fn validate_unsigned_rejects_empty_pub_keys() {
         // mock_witness decodes cleanly but has zero pub_keys -> InsufficientShares -> BadProof.
         let tx = dummy_tx(mock_witness(), one_input(tx_hash, 0));
         assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+// ── Fee-rejection E2E (debt item from SESSION_STATE.md, paired with the
+//    Phase 5 un-ignore): proves that a tx with a valid ML-DSA witness but an
+//    under-priced fee is rejected at pool admission with Payment, and that
+//    one meeting the minimum is accepted.
+
+#[test]
+fn validate_unsigned_rejects_below_minimum_fee() {
+    new_test_ext().execute_with(|| {
+        // 100 in, 1 out -> fee 99. Set minimum to 100 -> reject.
+        set_min_fee(100);
+
+        let tx_hash = H256::from([42u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+
+        let inputs = one_input(tx_hash, 0);
+        let outputs = vec![TransactionOutput {
+            value: 1,
+            lock: QuantumLock::SingleSig([9u8; 32]),
+        }];
+        let (input_lock, tx) = real_signed_tx(inputs, outputs);
+
+        UtxoSet::<Test>::insert(utxo_id, Utxo { value: 100, lock: input_lock });
+
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::Payment);
+    });
+}
+
+#[test]
+fn validate_unsigned_accepts_at_minimum_fee() {
+    new_test_ext().execute_with(|| {
+        // Same shape, minimum lowered to 99 -> accepted (fee == min, not <).
+        set_min_fee(99);
+
+        let tx_hash = H256::from([42u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+
+        let inputs = one_input(tx_hash, 0);
+        let outputs = vec![TransactionOutput {
+            value: 1,
+            lock: QuantumLock::SingleSig([9u8; 32]),
+        }];
+        let (input_lock, tx) = real_signed_tx(inputs, outputs);
+
+        UtxoSet::<Test>::insert(utxo_id, Utxo { value: 100, lock: input_lock });
+
+        assert!(
+            run_validate_unsigned(tx).is_ok(),
+            "fee meeting the minimum must pass pool admission"
+        );
+    });
+}
+
+#[test]
+fn validate_unsigned_accepts_zero_fee_when_minimum_is_zero() {
+    new_test_ext().execute_with(|| {
+        // The default mock (min = 0) must continue to accept.
+        // 100 in, 100 out -> fee 0.
+        let tx_hash = H256::from([43u8; 32]);
+        let utxo_id = Qutxo::calculate_utxo_hash(tx_hash, 0);
+
+        let inputs = one_input(tx_hash, 0);
+        let outputs = vec![TransactionOutput {
+            value: 100,
+            lock: QuantumLock::SingleSig([9u8; 32]),
+        }];
+        let (input_lock, tx) = real_signed_tx(inputs, outputs);
+
+        UtxoSet::<Test>::insert(utxo_id, Utxo { value: 100, lock: input_lock });
+
+        assert!(run_validate_unsigned(tx).is_ok());
     });
 }
