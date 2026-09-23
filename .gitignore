@@ -22,3 +22,10 @@ deploy/secrets/
 deploy/wan/calibre-node-image.tar
 deploy/wan/secrets/
 deploy/wan/bin/
+# Validator identity material — never commit
+deploy/keys/
+**/pq.key
+**/pq.pub
+**/identity.json
+**/chains/
+**/network/secret_ed25519
