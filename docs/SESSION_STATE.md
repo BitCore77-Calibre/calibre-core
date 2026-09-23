@@ -3,7 +3,7 @@
 ## Where we are
 
 - **Commit:** `16da3d67` (local, not pushed — `origin/main` at `4e65e6f0`)
-- **Phase:** 8.6, 8.7, 8.8 complete; Phase 5 test un-ignored. Next: 8.9 (bench pays fees).
+- **Phase:** 8.6, 8.7, 8.8, 8.9 complete; Phase 5 test un-ignored. **Phase 8 fully closed.** Next: TotalIssuance fix, AuraFindAuthor integration test.
 - **Build:** native + WASM clean. `SKIP_WASM_BUILD=1 cargo test --workspace` -> 68 passed, 0 ignored.
 
 ## Locked this session
@@ -46,7 +46,7 @@ That is a multi-session redesign — not in 8.7. Recorded here so the door stays
 | 8.6 | Producer payout routing | done |
 | 8.7 | Stake pallet (bond/unbond) | done |
 | 8.8 | Valid-witness test harness | **done** (with 8.7) |
-| 8.9 | Bench txs pay fees | todo |
+| 8.9 | Bench txs pay fees | **done** |
 
 ## Open debt
 
@@ -54,7 +54,7 @@ That is a multi-session redesign — not in 8.7. Recorded here so the door stays
 2. **`AuraFindAuthor` slot -> author math is not unit-tested.** Runtime integration; can't be tested with the `u64` mock AccountId. Needs an integration test in `runtime`.
 3. **Treasury remains accounting-only.** `TreasuryAccumulated` is written but never minted. Treasury withdrawal (governance-gated) is a future concern.
 4. **`ProducerPending` exit semantics undocumented.** If a producer leaves the validator set with pending, it stays until they author again. Deliberate (no sweep, no governance call), but should be written down.
-5. **Bench txs pay zero fee.** With 8.3 live, next bench burst will fail pool admission. Fix in 8.9.
+5. **~~Bench txs pay zero fee.~~** RESOLVED. `tools/bench burst` subtracts a configurable fee (default 10_000 base units, override via 5th positional arg) from each output so `inputs > outputs`. Skips and reports UTXOs smaller than the fee rather than underflowing.
 6. **~~No valid-witness test harness.~~** RESOLVED. Real ML-DSA-44 keygen + sign in qutxo tests. `test_utxo_conservation_of_mass_and_double_spend` un-ignored; three fee-rejection E2E tests added with a configurable `TestFeeHandler`.
 7. **`/tmp/calibre-head` worktree check** confirmed `4e65e6f0` builds WASM clean — the earlier WASM failure was stale artifact from before the qutxo serde fix, not a real regression.
 

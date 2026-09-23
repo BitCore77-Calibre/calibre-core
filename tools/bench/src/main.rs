@@ -162,6 +162,15 @@ async fn cmd_keygen(args: &[String]) {
 async fn cmd_burst(args: &[String]) {
     let keys_path = args.get(2).map(|s| s.as_str()).unwrap_or("/tmp/bench-keys.json");
     let mints_path = args.get(3).map(|s| s.as_str()).unwrap_or("/tmp/bench-mints.json");
+    // Per-tx fee in CAL base units. Must be >= minimum_fee(inputs, outputs)
+    // as computed by pallet-calibre-fees, or pool admission rejects the tx
+    // with InvalidTransaction::Payment (Phase 8.3). Runtime minimum for a
+    // 1-in/1-out tx is BaseTxFee + PerInOutFee * 2. Default 10_000 is
+    // comfortably above that; override as the 5th positional arg.
+    let fee_per_tx: u128 = args.get(4)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10_000);
+    eprintln!("burst fee per tx: {} base units", fee_per_tx);
     let rpc_url = args.get(4).map(|s| s.as_str()).unwrap_or("http://127.0.0.1:9944");
     let out = args.get(5).map(|s| s.as_str()).unwrap_or("/tmp/bench-results.json");
 
@@ -207,10 +216,20 @@ async fn cmd_burst(args: &[String]) {
         uh.extend_from_slice(&0u32.to_le_bytes());
         let utxo_id = blake2_256(&uh);
 
-        // Build tx
+        // Build tx. Leave `fee_per_tx` behind as the implicit fee so pool
+        // admission (validate_unsigned) accepts the tx. Without this, output
+        // equals input, fee == 0, and 8.3 rejects the tx.
+        if m.value < fee_per_tx {
+            eprintln!(
+                "skip: UTXO {} value {} < fee {}",
+                hex::encode(&lock_inner), m.value, fee_per_tx
+            );
+            continue;
+        }
+        let output_value = m.value.saturating_sub(fee_per_tx);
         let inputs = vec![TxInput { tx_hash: genesis_hash, output_index: 0 }];
         let outputs = vec![TxOutput {
-            value: m.value,
+            value: output_value,
             lock: QuantumLock::AegisThreshold(lock_inner),
         }];
 
@@ -447,7 +466,7 @@ async fn main() {
             println!("{}", hex::encode(blake2_256(input.as_bytes())));
         },
         _ => eprintln!(
-            "usage:\n  calibre-bench keygen <N> <out.json>\n  calibre-bench burst <keys.json> <mints.json> <rpc> <out.json>\n  calibre-bench report <results.json>"
+            "usage:\n  calibre-bench keygen <N> <out.json>\n  calibre-bench burst <keys.json> <mints.json> <rpc> <out.json> [fee_per_tx]\n  calibre-bench report <results.json>"
         ),
     }
 }
