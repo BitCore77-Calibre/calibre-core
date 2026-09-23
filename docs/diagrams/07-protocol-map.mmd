@@ -1,0 +1,75 @@
+graph TB
+    ROOT["CALIBRE PROTOCOL<br/>v0.8.9 — 68 tests passing"]
+
+    subgraph SHIPPED["SHIPPED — proven, tested, on-chain"]
+        direction TB
+        S1["Q-UTXO state model<br/>pallet-qutxo"]
+        S2["Real ML-DSA-44 on-chain<br/>MlDsaKeyPair::verify in WASM"]
+        S3["Four verification gates<br/>mempool / state / runtime / crypto"]
+        S4["Fast-Path mempool<br/>per-input conflict tags, us rejection"]
+        S5["QuantumLock enum<br/>forkless crypto migration (2 variants)"]
+        S6["7-validator testnet<br/>GRANDPA 5/7 finality, 169 TPS parity"]
+        S7["Fee market<br/>EIP-1559-style base fee, 50/30/20 split"]
+        S8["Producer payout routing<br/>mint at block end, pending if no lock"]
+        S9["Stake pallet<br/>bond/unbond, burn-and-record"]
+        S10["Light client + ZK verifier<br/>calibre-light v0.4, RISC Zero 3.0.6"]
+    end
+
+    subgraph PARTIAL["PARTIAL — started, not finished"]
+        direction TB
+        P1["A.E.G.I.S. threshold MPC<br/>single Dilithium key today"]
+        P2["Hardware attestation<br/>AppAttest / Play Integrity no-op"]
+        P3["Light nodes<br/>library shipped; production app pending"]
+        P4["Audit preparation<br/>weights done; fuzz + audit pending"]
+        P5["Throughput<br/>limiter upstream of block weight"]
+        P6["Treasury<br/>accumulates but nothing withdraws it"]
+    end
+
+    subgraph NOT_STARTED["NOT STARTED — whitepaper promises"]
+        direction TB
+        N1["ZK Intent Bridge<br/>solver network, bonding, slashing"]
+        N2["ZkShield privacy<br/>Pedersen commitments + nullifiers"]
+        N3["HybridPqClassical lock<br/>2nd QuantumLock variant"]
+        N4["Seed-phrase elimination<br/>described as goal, no design"]
+        N5["Cryptographic governance<br/>migration path claimed, no mechanism"]
+        N6["Mainnet<br/>tokenomics finalised, launch ops"]
+    end
+
+    subgraph UNSCHEDULED["UNSCHEDULED — discovered by testing"]
+        direction TB
+        U1["Stake gating<br/>bond exists but gates nothing"]
+        U2["Unbonding period<br/>no delay = flash-stake attack"]
+        U3["Slashing conditions<br/>not designed"]
+        U4["Validator selection by stake<br/>Aura picks from fixed list"]
+        U5["Dual-key staking<br/>Cardano model — consensus redesign"]
+        U6["TotalIssuance integrity<br/>stale on execute_utxo_tx path"]
+        U7["Whitepaper refresh<br/>still v0.6.0, no economic layer"]
+    end
+
+    ROOT --> SHIPPED
+    ROOT --> PARTIAL
+    ROOT --> NOT_STARTED
+    ROOT --> UNSCHEDULED
+
+    S7 -.->|"not in whitepaper"| U7
+    S8 -.->|"not in whitepaper"| U7
+    S9 -.->|"not in whitepaper"| U7
+    S9 -.->|"must gate consensus"| U1
+    U1 --> U2
+    U1 --> U3
+    U1 --> U4
+    U5 -.->|"alternative to"| U1
+    P1 -.->|"needs real attestation"| P2
+    P6 -.->|"needs governance"| N5
+
+    classDef shipped fill:#0d3320,stroke:#3fb950,stroke-width:2px,color:#e6edf3
+    classDef partial fill:#3d2f0d,stroke:#d29922,stroke-width:2px,color:#e6edf3
+    classDef notstarted fill:#2d2d30,stroke:#8b949e,stroke-width:1px,color:#e6edf3
+    classDef unscheduled fill:#3d1414,stroke:#f85149,stroke-width:2px,color:#e6edf3
+    classDef root fill:#1f2b3d,stroke:#58a6ff,stroke-width:3px,color:#e6edf3
+
+    class S1,S2,S3,S4,S5,S6,S7,S8,S9,S10 shipped
+    class P1,P2,P3,P4,P5,P6 partial
+    class N1,N2,N3,N4,N5,N6 notstarted
+    class U1,U2,U3,U4,U5,U6,U7 unscheduled
+    class ROOT root
