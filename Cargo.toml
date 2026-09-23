@@ -9,6 +9,7 @@ edition = "2021"
 members = [
     "node",
     "pallets/template",
+    "pallets/calibre-fees",
     "pallets/qutxo",
     "pallets/zk-verifier",
     "primitives",
@@ -34,6 +35,7 @@ resolver = "2"
     calibre-risc0-host = { path = "crates/calibre-risc0-host", default-features = false }
     calibre-qutxo-rpc-api = { path = "crates/qutxo-rpc-api", default-features = false }
     pallet-qutxo = { path = "pallets/qutxo", default-features = false }
+pallet-calibre-fees = { path = "pallets/calibre-fees", default-features = false }
     pallet-zk-verifier = { path = "pallets/zk-verifier", default-features = false }
     
 solochain-template-runtime = { path = "./runtime", default-features = false }

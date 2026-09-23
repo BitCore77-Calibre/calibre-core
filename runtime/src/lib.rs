@@ -273,4 +273,8 @@ mod runtime {
 	#[runtime::pallet_index(9)]
 	pub type ZkVerifier = pallet_zk_verifier;
 
+	// Fee market — splits tx fees producer / treasury / burn
+	#[runtime::pallet_index(10)]
+	pub type CalibreFees = pallet_calibre_fees;
+
 }

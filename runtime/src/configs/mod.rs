@@ -162,3 +162,24 @@ impl pallet_template::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = pallet_template::weights::SubstrateWeight<Runtime>;
 }
+
+parameter_types! {
+	/// Minimum base fee per UTXO tx (in smallest CAL unit).
+	pub const BaseTxFee: Balance = 1_000;
+	/// Additional fee per input + per output.
+	pub const PerInOutFee: Balance = 100;
+	/// Percentage of fee routed to the block producer.
+	pub const ProducerFeeShare: u8 = 50;
+	/// Percentage of fee routed to the treasury.
+	pub const TreasuryFeeShare: u8 = 30;
+}
+
+impl pallet_calibre_fees::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Balance = Balance;
+	type BaseTxFee = BaseTxFee;
+	type PerInOutFee = PerInOutFee;
+	type ProducerFeeShare = ProducerFeeShare;
+	type TreasuryFeeShare = TreasuryFeeShare;
+	type WeightInfo = pallet_calibre_fees::weights::SubstrateWeight<Runtime>;
+}
