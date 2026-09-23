@@ -104,7 +104,7 @@ impl pallet_grandpa::Config for Runtime {
 	type WeightInfo = ();
 	type MaxAuthorities = ConstU32<32>;
 	type MaxNominators = ConstU32<0>;
-	type MaxSetIdSessionEntries = ConstU64<0>;
+	type MaxSetIdSessionEntries = ConstU64<600>;  // SessionPeriod
 
 	type KeyOwnerProof = sp_core::Void;
 	type EquivocationReportSystem = ();
@@ -186,6 +186,8 @@ parameter_types! {
 	/// Treasury accumulates below this and doesn't mint (1,000 CAL = 1e21 units).
 	/// Keeps UTXO set clean — one treasury UTXO per ~60 blocks at launch.
 	pub const MinTreasurySettle: Balance = 1_000_000_000_000_000_000_000;
+	/// Minimum stake to become a validator candidate. 1,000 CAL.
+	pub const MinValidatorStake: Balance = 1_000_000_000_000_000_000_000;
 }
 
 /// Resolve the Aura block author from the pre-runtime digest.
@@ -287,6 +289,7 @@ impl pallet_stake::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
 	type MaxBondInputs = ConstU32<16>;
+	type MinValidatorStake = MinValidatorStake;
 	type UtxoConsumer = crate::Qutxo;
 	type UtxoMinter = crate::Qutxo;
 	type WeightInfo = pallet_stake::weights::SubstrateWeight<Runtime>;
@@ -327,14 +330,83 @@ parameter_types! {
 	pub const SessionOffset: BlockNumber = 0;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Epoch-driven session manager (Phase 9.3)
+// ─────────────────────────────────────────────────────────────
+//
+// Sessions rotate every 600 blocks (1 hour). Epochs are 6 sessions
+// long (6 hours). At each epoch boundary, the validator set is
+// re-elected from the candidate registry in pallet-stake — top-N by
+// stake. Between epoch boundaries, the set is left unchanged.
+//
+// `SessionManager::new_session(N)` plans the set for session N.
+// Returning `None` means "keep current set". Returning `Some(vec)`
+// makes that vec active starting at session N.
+//
+// Safety:
+//   - Session 0 (genesis) returns `None`. The genesis-set authorities
+//     (from pallet_aura::Authorities and pallet_grandpa::Authorities)
+//     remain in place.
+//   - If no candidates are elected (empty registry or all zero-stake),
+//     returns `None` — no disruption.
+//   - Session pallet filters elected validators by `NextKeys` storage.
+//     Validators without a registered session key are silently dropped
+//     from the authority set; they must call `session.set_keys` first.
+
+parameter_types! {
+	/// Sessions per epoch. 6 sessions × 1 hour = 6-hour epochs.
+	pub const EpochDurationInSessions: u32 = 6;
+	/// Maximum active validators elected per epoch.
+	pub const MaxActiveValidators: u32 = 7;
+}
+
+/// Return true if the given session index is an epoch boundary —
+/// i.e. the first session of a new epoch. Session 0 is the genesis
+/// boundary and does NOT trigger rotation (the genesis set is used).
+#[inline]
+pub(crate) fn is_epoch_boundary(session_index: u32, epoch_len: u32) -> bool {
+    if epoch_len == 0 {
+        return false;
+    }
+    session_index != 0 && session_index % epoch_len == 0
+}
+
+/// Epoch-driven validator election. Reads `pallet-stake`'s candidate
+/// registry at epoch boundaries; returns the top-N by stake.
+pub struct CalibreSessionManager;
+
+impl pallet_session::SessionManager<AccountId> for CalibreSessionManager {
+	fn new_session(index: sp_staking::SessionIndex) -> Option<alloc::vec::Vec<AccountId>> {
+		// Genesis or mid-epoch: keep current set.
+		let epoch_len = EpochDurationInSessions::get();
+		if !is_epoch_boundary(index, epoch_len) {
+			return None;
+		}
+
+		// Epoch boundary — re-elect from the candidate registry.
+		let elected = crate::Stake::elect_top_n(MaxActiveValidators::get());
+
+		// Empty election result: keep the current set rather than
+		// collapsing the validator set to zero.
+		if elected.is_empty() {
+			return None;
+		}
+
+		Some(elected)
+	}
+
+	fn start_session(_start_index: sp_staking::SessionIndex) {}
+
+	fn end_session(_end_index: sp_staking::SessionIndex) {}
+}
+
 impl pallet_session::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type ValidatorId = AccountId;
 	type ValidatorIdOf = sp_runtime::traits::ConvertInto;
 	type ShouldEndSession = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
 	type NextSessionRotation = pallet_session::PeriodicSessions<SessionPeriod, SessionOffset>;
-	// No election yet. Same set persists; only session keys rotate.
-	type SessionManager = ();
+	type SessionManager = CalibreSessionManager;
 	// Aura + GRANDPA both implement SessionHandler for their key types.
 	type SessionHandler =
 		<SessionKeys as sp_runtime::traits::OpaqueKeys>::KeyTypeIdProviders;
@@ -342,4 +414,61 @@ impl pallet_session::Config for Runtime {
 	// No validators are disabled in this phase.
 	type DisablingStrategy = ();
 	type WeightInfo = ();
+}
+
+#[cfg(test)]
+mod session_rotation_tests {
+	use super::is_epoch_boundary;
+
+	#[test]
+	fn session_zero_is_not_a_boundary() {
+		// Genesis set is used at session 0; no rotation.
+		assert!(!is_epoch_boundary(0, 6));
+	}
+
+	#[test]
+	fn sessions_within_first_epoch_are_not_boundaries() {
+		for s in 1..6 {
+			assert!(!is_epoch_boundary(s, 6), "session {} should not rotate", s);
+		}
+	}
+
+	#[test]
+	fn session_six_is_boundary() {
+		assert!(is_epoch_boundary(6, 6));
+	}
+
+	#[test]
+	fn session_twelve_is_boundary() {
+		assert!(is_epoch_boundary(12, 6));
+	}
+
+	#[test]
+	fn session_eighteen_is_boundary() {
+		assert!(is_epoch_boundary(18, 6));
+	}
+
+	#[test]
+	fn mid_epoch_sessions_do_not_rotate() {
+		for s in [7u32, 8, 9, 10, 11, 13, 14, 15, 16, 17] {
+			assert!(!is_epoch_boundary(s, 6), "session {} should not rotate", s);
+		}
+	}
+
+	#[test]
+	fn zero_epoch_len_is_safe() {
+		// Defensive: no rotation if epoch length is somehow 0.
+		assert!(!is_epoch_boundary(0, 0));
+		assert!(!is_epoch_boundary(6, 0));
+		assert!(!is_epoch_boundary(12, 0));
+	}
+
+	#[test]
+	fn epoch_len_one_rotates_every_session_except_zero() {
+		// Pathological config: rotate every session.
+		assert!(!is_epoch_boundary(0, 1));
+		assert!(is_epoch_boundary(1, 1));
+		assert!(is_epoch_boundary(2, 1));
+		assert!(is_epoch_boundary(100, 1));
+	}
 }

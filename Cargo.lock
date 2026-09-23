@@ -11230,6 +11230,7 @@ dependencies = [
  "sp-offchain",
  "sp-runtime",
  "sp-session",
+ "sp-staking",
  "sp-storage 22.0.0",
  "sp-transaction-pool",
  "sp-version",
