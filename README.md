@@ -8,6 +8,14 @@ Calibre replaces elliptic-curve cryptography in the value path with NIST-standar
 
 ---
 
+## Open the full source in VS Code
+
+Open [`calibre-core.code-workspace`](calibre-core.code-workspace) in VS Code, or run:
+
+    code "$HOME/calibre-template/calibre-core.code-workspace"
+
+The workspace opens the repository root and indexes both Rust workspaces (`Cargo.toml` and `zk/Cargo.toml`). Build output, local validator runs, node data, and installed packages are hidden from the editor tree and search; they remain on disk for local use. All protocol, node, pallet, explorer, tool, and documentation changes belong in this repository.
+
 ## Quick Start
 
 Prerequisite: [Docker](https://docs.docker.com/get-docker/).

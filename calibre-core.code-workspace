@@ -1,0 +1,38 @@
+{
+  "folders": [
+    {
+      "name": "CALIBRE Core",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "rust-analyzer.linkedProjects": [
+      "Cargo.toml",
+      "zk/Cargo.toml"
+    ],
+    "files.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/.phase94-runs": true,
+      "**/observatory/data": true
+    },
+    "search.exclude": {
+      "**/target": true,
+      "**/node_modules": true,
+      "**/.phase94-runs": true,
+      "**/observatory/data": true
+    },
+    "files.watcherExclude": {
+      "**/target/**": true,
+      "**/node_modules/**": true,
+      "**/.phase94-runs/**": true,
+      "**/observatory/data/**": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "rust-lang.rust-analyzer",
+      "ms-python.python"
+    ]
+  }
+}
