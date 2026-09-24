@@ -29,3 +29,8 @@ deploy/keys/
 **/identity.json
 **/chains/
 **/network/secret_ed25519
+
+# Disposable Phase 9.4 validator runs and observation databases
+/.phase94-runs/
+# Local Observatory history; never publish observed node data
+/observatory/data/

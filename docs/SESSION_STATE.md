@@ -28,8 +28,11 @@
   available. Runtime spec version is 101 for this behavior change.
 - **Lab scope:** keep the current seven-validator cap for this validation. The
   planned 21-validator/two-week soak is deferred and has not passed.
-- **Next gate:** live stake-driven replacement and finality with the normal
-  600-slot session duration, then multi-computer operation.
+- **Prepared next run:** a user-started single-computer, normal-duration
+  seven-validator election with one standby, synthetic genesis stake, and
+  read-only Observatory evidence (`docs/PHASE9_4_LOCAL_RUN.md`). It has not run.
+- **Deferred:** multi-computer operation until the additional computers are
+  available. Signed live candidate registration remains untested.
 
 ## Phase 9 progress
 

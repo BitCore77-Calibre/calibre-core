@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>CALIBRE · Testnet Observatory</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="identity"><div class="mark" aria-hidden="true">₡</div><div><strong>CALIBRE</strong><small>TESTNET OBSERVATORY · EARLY INTEGRATION</small></div></div>
+      <div class="top-values" aria-live="polite">
+        <span id="network-status" class="status offline">OFFLINE</span>
+        <span>Nodes <b id="nodes-count">0 / 1</b></span>
+        <span>Best <b id="best-height">—</b></span>
+        <span>Finalized <b id="finalized-height">—</b></span>
+        <span class="compact">Genesis <b id="genesis-id">—</b></span>
+      </div>
+      <div class="right"><span id="freshness">Awaiting first observation</span><button id="refresh" type="button">Refresh</button></div>
+    </header>
+    <main>
+      <div class="notice" id="notice" role="status">Connecting to local node RPC. No activity is simulated.</div>
+      <div class="board" id="board" aria-label="Twenty stage blockchain observatory"></div>
+    </main>
+    <footer class="footer"><span>PROCESS <b>01 → 16</b> · RESEARCH <b>17 → 20</b> · Read left to right, then down</span><span>Every observation identifies its source · <span id="last-updated">Not connected</span></span></footer>
+  </div>
+  <div id="dialog" class="dialog" hidden>
+    <div class="shade" data-close="true"></div>
+    <section class="detail" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <div class="detail-top"><span id="detail-number">STAGE</span><button id="close-detail" type="button">Close ×</button></div>
+      <h1 id="detail-title"></h1>
+      <p id="detail-description"></p>
+      <div id="detail-evidence" aria-live="polite"></div>
+      <h2>Recent observations</h2><div id="detail-events" class="events"></div>
+      <p class="footnote">Node RPC and collector observations are evidence. A feature marked unavailable has no instrumented backend in this package.</p>
+    </section>
+  </div>
+</body>
+</html>
