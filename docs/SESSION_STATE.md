@@ -2,6 +2,11 @@
 
 - **Baseline:** `b932a70` on `phase9.4-babe` (BABE runtime and node integration).
 - **Phase:** 9.4 validation in progress. Earlier 9.1-9.3 work remains the baseline.
+- **Prepared security integration:** the QUTXO input-ownership and chain-bound
+  staking bond repairs from `main` commit `4991959` are included with BABE in
+  runtime spec 103. The combined source has not been built or tested. Earlier
+  runtime-101 BABE and runtime-102 security results apply to their original
+  binaries, not to this combined runtime.
 - **Verified here:** release node with embedded WASM builds; native workspace tests pass;
   a temporary one-validator BABE node advanced from best block 7 to 10 and
   GRANDPA-finalized block 5 to 7. The runtime election guard has three passing
@@ -25,7 +30,7 @@
   or the production 600-slot session duration.
 - **Liveness guard:** signed `session.purge_keys` calls are filtered for all
   accounts until a validator-aware exit policy exists. `session.set_keys` remains
-  available. Runtime spec version is 101 for this behavior change.
+  available. This behavior began in runtime 101 and is retained in 103.
 - **Lab scope:** keep the current seven-validator cap for this validation. The
   planned 21-validator/two-week soak is deferred and has not passed.
 - **Prepared next run:** a user-started single-computer, normal-duration

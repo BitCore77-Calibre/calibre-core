@@ -7189,6 +7189,7 @@ dependencies = [
  "dilithium-rs",
  "frame-support",
  "frame-system",
+ "pallet-stake",
  "parity-scale-codec",
  "scale-info",
  "serde",
@@ -8045,6 +8046,7 @@ dependencies = [
 name = "pq-signer"
 version = "0.1.0"
 dependencies = [
+ "calibre-primitives",
  "dilithium-rs",
  "hex",
  "serde",

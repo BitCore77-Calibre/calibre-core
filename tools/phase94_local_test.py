@@ -147,7 +147,7 @@ def prepare(run_dir: Path) -> dict:
         "node_binary_sha256": sha256_file(NODE),
         "chain_spec_sha256": hashlib.sha256(spec_text.encode()).hexdigest(),
         "epoch_slots": SESSION_SLOTS, "sessions_per_election": 6,
-        "expected_spec_version": 101,
+        "expected_spec_version": 103,
         "identity_order": list(IDENTITIES),
         "initial_validators": ["0x" + account.hex() for account in active],
         "replacement_validator": "0x" + standby.hex(),

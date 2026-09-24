@@ -41,7 +41,7 @@ pub mod pallet {
         type MinValidatorStake: Get<Self::Balance>;
 
         /// Consumes UTXOs at bond time (qutxo in the runtime; () in tests).
-        type UtxoConsumer: UtxoConsumer<Self::Balance>;
+        type UtxoConsumer: UtxoConsumer<Self::Balance, Self::AccountId>;
 
         /// Mints UTXOs at unbond time (qutxo in the runtime; () in tests).
         type UtxoMinter: FeeMinter<Self::Balance, [u8; 32]>;
@@ -99,8 +99,10 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        /// Bond UTXOs into the staking ledger. The witness must sign
-        /// `(inputs, [])` against the first input's lock. On success, the
+        /// Bond UTXOs into the staking ledger. The witness must authorize
+        /// the versioned staking domain, this chain, the signed caller and
+        /// every input, using their shared lock. Legacy witnesses fail closed.
+        /// On success, the
         /// UTXOs are consumed (removed from the set, TotalIssuance
         /// decremented) and `Stake[who]` is credited.
         #[pallet::call_index(0)]
@@ -115,7 +117,7 @@ pub mod pallet {
                 inputs.len() <= T::MaxBondInputs::get() as usize,
                 Error::<T>::BondTooManyInputs
             );
-            let amount = T::UtxoConsumer::consume_with_witness(&inputs, &witness)
+            let amount = T::UtxoConsumer::consume_with_witness(&who, &inputs, &witness)
                 .ok_or(Error::<T>::UtxoConsumeFailed)?;
             Stake::<T>::mutate(&who, |s| *s = s.saturating_add(amount));
             TotalStaked::<T>::mutate(|t| *t = t.saturating_add(amount));

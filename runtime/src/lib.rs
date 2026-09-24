@@ -69,9 +69,9 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
     // The version of the runtime specification. A full node will not attempt to use its native
     //   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
     //   `spec_version`, and `authoring_version` are the same between Wasm and native.
-    // Phase 9.4 changes signed-call filtering; distinguish it from the
-    // earlier BABE runtime when nodes compare native and on-chain versions.
-    spec_version: 101,
+    // Combines the Phase 9.4 BABE call filter with chain-bound staking bond
+    // authorization. Legacy bond witnesses are rejected by this runtime.
+    spec_version: 103,
     impl_version: 1,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,

@@ -12,6 +12,7 @@ name = "calibre-keygen"
 path = "src/main.rs"
 
 [dependencies]
+calibre-primitives = { workspace = true, features = ["std"] }
 dilithium-rs = "0.4"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }

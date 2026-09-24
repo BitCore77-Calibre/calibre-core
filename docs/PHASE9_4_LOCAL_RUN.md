@@ -32,7 +32,7 @@ observation database remain in the run directory.
 ## What PASS means
 
 The Observatory reports **PASS** only after all eight nodes have the same
-genesis, the expected runtime version (101) and 600-slot BABE epoch, and
+genesis, the expected runtime version (103) and 600-slot BABE epoch, and
 have reached session 6. It then checks that exactly one of the initial
 seven validators is replaced by `//Two`, that the BABE and GRANDPA key
 sets also change by exactly one, and that all eight nodes agree on a
