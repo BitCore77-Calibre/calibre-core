@@ -50,7 +50,10 @@ pub mod pallet {
     #[pallet::event] #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> { TransactionExecuted { tx_hash: sp_core::H256, value: T::Balance } }
     #[pallet::error]
-    pub enum Error<T> { UtxoDoesNotExist, ValueMismatch, TransactionTooLarge, InvalidPqSignature }
+    pub enum Error<T> {
+        UtxoDoesNotExist, ValueMismatch, TransactionTooLarge, InvalidPqSignature,
+        EmptyInputs, DuplicateInput, ValueOverflow, FeeTooLow,
+    }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
@@ -71,36 +74,22 @@ pub mod pallet {
         ))]
         pub fn execute_utxo_tx(origin: OriginFor<T>, tx: Transaction<T::Balance>) -> DispatchResult {
             ensure_none(origin)?;
-            ensure!(tx.inputs.len() <= T::MaxTxInputs::get() as usize, Error::<T>::TransactionTooLarge);
-            ensure!(tx.outputs.len() <= T::MaxTxOutputs::get() as usize, Error::<T>::TransactionTooLarge);
+            let (total_input_value, total_output_value, input_ids) = Self::validate_transaction(&tx)?;
             let tx_payload = (tx.inputs.clone(), tx.outputs.clone());
             let tx_hash = BlakeTwo256::hash(&tx_payload.encode());
-            let witness: AegisWitness = Decode::decode(&mut &tx.witness[..]).map_err(|_| Error::<T>::InvalidPqSignature)?;
-            // ── REAL POST-QUANTUM VERIFICATION ──
-            let first_lock = UtxoSet::<T>::get(Self::calculate_utxo_hash(tx.inputs[0].tx_hash, tx.inputs[0].output_index))
-                .ok_or(Error::<T>::UtxoDoesNotExist)?.lock;
-            calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
-                &first_lock,
-                &tx_payload.encode(),
-                &witness,
-            ).map_err(|_| Error::<T>::InvalidPqSignature)?;
-            let mut total_input_value = T::Balance::default();
-            for input in &tx.inputs {
-                let utxo_hash = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
-                let utxo = UtxoSet::<T>::get(utxo_hash).ok_or(Error::<T>::UtxoDoesNotExist)?;
-                total_input_value = total_input_value.saturating_add(utxo.value);
+            // All ownership, existence, duplicate, value and fee checks have
+            // completed before any input is consumed.
+            for utxo_hash in input_ids {
                 UtxoSet::<T>::remove(utxo_hash);
-                    Self::mark_utxo_set_dirty();
             }
+            Self::mark_utxo_set_dirty();
             // Mirror the UtxoConsumer path: consumed value leaves the UTXO set.
             // Producer/treasury accumulators are handled separately by the fee
             // pallet; the burned share of the fee leaves TotalIssuance for good.
             if total_input_value > T::Balance::default() {
                 TotalIssuance::<T>::mutate(|t| *t = t.saturating_sub(total_input_value));
             }
-            let mut total_output_value = T::Balance::default();
             for (idx, output) in tx.outputs.iter().enumerate() {
-                total_output_value = total_output_value.saturating_add(output.value);
                 let new_utxo_hash = Self::calculate_utxo_hash(tx_hash, idx as u32);
                 UtxoSet::<T>::insert(new_utxo_hash, Utxo { value: output.value, lock: output.lock.clone() });
             Self::mark_utxo_set_dirty();
@@ -109,7 +98,6 @@ pub mod pallet {
             if total_output_value > T::Balance::default() {
                 TotalIssuance::<T>::mutate(|t| *t = t.saturating_add(total_output_value));
             }
-            ensure!(total_input_value >= total_output_value, Error::<T>::ValueMismatch);
             let total_fee = total_input_value.saturating_sub(total_output_value);
             if total_fee > T::Balance::default() {
                 let base_fee = T::FeeHandler::minimum_fee(tx.inputs.len() as u32, tx.outputs.len() as u32);
@@ -137,6 +125,61 @@ pub mod pallet {
 
     }
     impl<T: Config> Pallet<T> {
+        /// The current witness format authorizes one lock. Every input must
+        /// carry that exact lock; combining different owners needs a future
+        /// multi-witness transaction format, not first-input authorization.
+        /// This helper never mutates storage and is shared by pool admission,
+        /// dispatch and staking's UtxoConsumer path.
+        pub(crate) fn validate_inputs(
+            inputs: &[TransactionInput],
+            witness_bytes: &[u8],
+            payload: &[u8],
+        ) -> Result<(T::Balance, Vec<sp_core::H256>), Error<T>> {
+            ensure!(!inputs.is_empty(), Error::<T>::EmptyInputs);
+            ensure!(inputs.len() <= T::MaxTxInputs::get() as usize, Error::<T>::TransactionTooLarge);
+            ensure!(!witness_bytes.is_empty() && witness_bytes.len() <= 8 * 1024, Error::<T>::InvalidPqSignature);
+            let mut ids = Vec::with_capacity(inputs.len());
+            // Reject duplicates even when an input is already stale.
+            for input in inputs {
+                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
+                ensure!(!ids.contains(&id), Error::<T>::DuplicateInput);
+                ids.push(id);
+            }
+            let mut total = T::Balance::default();
+            let mut owner = None;
+            for id in &ids {
+                let utxo = UtxoSet::<T>::get(id).ok_or(Error::<T>::UtxoDoesNotExist)?;
+                match &owner {
+                    Some(lock) => ensure!(lock == &utxo.lock, Error::<T>::InvalidPqSignature),
+                    None => owner = Some(utxo.lock),
+                }
+                total = total.checked_add(&utxo.value).ok_or(Error::<T>::ValueOverflow)?;
+            }
+            let witness: AegisWitness = Decode::decode(&mut &witness_bytes[..])
+                .map_err(|_| Error::<T>::InvalidPqSignature)?;
+            calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
+                &owner.ok_or(Error::<T>::EmptyInputs)?, payload, &witness,
+            ).map_err(|_| Error::<T>::InvalidPqSignature)?;
+            Ok((total, ids))
+        }
+
+        fn validate_transaction(
+            tx: &Transaction<T::Balance>,
+        ) -> Result<(T::Balance, T::Balance, Vec<sp_core::H256>), Error<T>> {
+            ensure!(tx.inputs.len() <= T::MaxTxInputs::get() as usize, Error::<T>::TransactionTooLarge);
+            ensure!(tx.outputs.len() <= T::MaxTxOutputs::get() as usize, Error::<T>::TransactionTooLarge);
+            let payload = (&tx.inputs, &tx.outputs).encode();
+            let (total_in, ids) = Self::validate_inputs(&tx.inputs, &tx.witness, &payload)?;
+            let mut total_out = T::Balance::default();
+            for output in &tx.outputs {
+                total_out = total_out.checked_add(&output.value).ok_or(Error::<T>::ValueOverflow)?;
+            }
+            ensure!(total_in >= total_out, Error::<T>::ValueMismatch);
+            let fee = total_in.saturating_sub(total_out);
+            ensure!(fee >= T::FeeHandler::minimum_fee(tx.inputs.len() as u32, tx.outputs.len() as u32), Error::<T>::FeeTooLow);
+            Ok((total_in, total_out, ids))
+        }
+
         /// Recompute the UTXO set root from scratch.
         ///
         /// O(n log n) in the number of UTXOs. Acceptable for testnet.
@@ -233,90 +276,14 @@ pub mod pallet {
                 return InvalidTransaction::Call.into();
             };
 
-            // ── BOUNDED-SIZE CHECKS (cheapest, run first) ──
-            // Reject oversized inputs before any allocation / iteration.
-            if tx.inputs.is_empty() || tx.inputs.len() > T::MaxTxInputs::get() as usize {
-                return InvalidTransaction::ExhaustsResources.into();
-            }
-            if tx.outputs.len() > T::MaxTxOutputs::get() as usize {
-                return InvalidTransaction::ExhaustsResources.into();
-            }
-            // ML-DSA-44 signature ≈ 2.4 KB, pubkey ≈ 1.3 KB → 8 KB is generous.
-            const MAX_WITNESS_BYTES: usize = 8 * 1024;
-            if tx.witness.is_empty() || tx.witness.len() > MAX_WITNESS_BYTES {
-                return InvalidTransaction::BadProof.into();
-            }
-
-            // ── INTRA-TX DUPLICATE INPUT DETECTION ──
-            // Same UTXO listed twice would pass the pool's per-UTXO dedup but
-            // double-count value at dispatch. O(n²) is fine: n ≤ MaxTxInputs.
-            for i in 0..tx.inputs.len() {
-                for j in (i + 1)..tx.inputs.len() {
-                    if tx.inputs[i].tx_hash == tx.inputs[j].tx_hash
-                        && tx.inputs[i].output_index == tx.inputs[j].output_index
-                    {
-                        return InvalidTransaction::BadProof.into();
-                    }
-                }
-            }
-
-            // ── UTXO EXISTENCE + LOCK-TYPE CHECK ──
-            let first_id = Self::calculate_utxo_hash(
-                tx.inputs[0].tx_hash,
-                tx.inputs[0].output_index,
-            );
-            let first_utxo = UtxoSet::<T>::get(&first_id).ok_or(InvalidTransaction::Stale)?;
-            if !matches!(first_utxo.lock, QuantumLock::AegisThreshold(_)) {
-                return InvalidTransaction::BadProof.into();
-            }
-            for input in tx.inputs.iter().skip(1) {
-                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
-                if UtxoSet::<T>::get(&id).is_none() {
-                    return InvalidTransaction::Stale.into();
-                }
-            }
-
-            // ── FULL POST-QUANTUM VERIFICATION ──
-            // Mirror execute_utxo_tx: verify against the first input's lock.
-            // Invalid signatures never enter the pool, so a flood of junk
-            // costs the attacker one ML-DSA verify per attempt — they pay
-            // it, not the block producer.
-            let witness: AegisWitness = match Decode::decode(&mut &tx.witness[..]) {
-                Ok(w) => w,
-                Err(_) => return InvalidTransaction::BadProof.into(),
-            };
-            let payload = (tx.inputs.clone(), tx.outputs.clone()).encode();
-            if calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
-                &first_utxo.lock,
-                &payload,
-                &witness,
-            )
-            .is_err()
-            {
-                return InvalidTransaction::BadProof.into();
-            }
-
-            // ── FEE CHECK (pool-side minimum fee) ──
-            // Reconstruct what execute_utxo_tx will compute. Reject under-priced
-            // txs here so the pool can't be flooded with zero-fee junk.
-            let mut total_in = T::Balance::default();
-            for input in tx.inputs.iter() {
-                let id = Self::calculate_utxo_hash(input.tx_hash, input.output_index);
-                if let Some(u) = UtxoSet::<T>::get(&id) {
-                    total_in = total_in.saturating_add(u.value);
-                }
-            }
-            let mut total_out = T::Balance::default();
-            for out in tx.outputs.iter() {
-                total_out = total_out.saturating_add(out.value);
-            }
-            let fee = total_in.saturating_sub(total_out);
-            let min_fee = T::FeeHandler::minimum_fee(
-                tx.inputs.len() as u32,
-                tx.outputs.len() as u32,
-            );
-            if fee < min_fee {
-                return InvalidTransaction::Payment.into();
+            // Exactly the same authorization and value checks as dispatch.
+            if let Err(error) = Self::validate_transaction(tx) {
+                return match error {
+                    Error::<T>::EmptyInputs | Error::<T>::TransactionTooLarge => InvalidTransaction::ExhaustsResources,
+                    Error::<T>::UtxoDoesNotExist => InvalidTransaction::Stale,
+                    Error::<T>::ValueMismatch | Error::<T>::ValueOverflow | Error::<T>::FeeTooLow => InvalidTransaction::Payment,
+                    _ => InvalidTransaction::BadProof,
+                }.into();
             }
 
             // ── PROVIDES (pool dedup per UTXO) ──
@@ -364,44 +331,26 @@ impl<T: pallet::Config> calibre_primitives::FeeMinter<T::Balance, [u8; 32]> for 
     }
 }
 
-impl<T: pallet::Config> calibre_primitives::UtxoConsumer<T::Balance> for pallet::Pallet<T> {
+impl<T: pallet::Config> calibre_primitives::UtxoConsumer<T::Balance, T::AccountId> for pallet::Pallet<T> {
     fn consume_with_witness(
+        beneficiary: &T::AccountId,
         inputs: &[calibre_primitives::TransactionInput],
         witness_bytes: &[u8],
     ) -> Option<T::Balance> {
-        use parity_scale_codec::{Decode, Encode};
-        use sp_runtime::Saturating;
-        use sp_std::vec::Vec;
+        use frame_support::traits::Get;
+        use sp_runtime::{Saturating, traits::Zero};
 
-        if inputs.is_empty() {
+        if inputs.is_empty() || inputs.len() > T::MaxTxInputs::get() as usize {
             return None;
         }
-        let witness: calibre_aegis_crypto::AegisWitness =
-            Decode::decode(&mut &witness_bytes[..]).ok()?;
 
-        let first_hash = pallet::Pallet::<T>::calculate_utxo_hash(
-            inputs[0].tx_hash,
-            inputs[0].output_index,
+        // Chain and beneficiary come from runtime context, never the witness.
+        let genesis_hash = frame_system::Pallet::<T>::block_hash(
+            frame_system::pallet_prelude::BlockNumberFor::<T>::zero(),
         );
-        let first_lock = pallet::UtxoSet::<T>::get(first_hash)?.lock;
-
-        // Stake bond signs (inputs, []) — no outputs.
-        let payload = (
-            inputs.to_vec(),
-            Vec::<calibre_primitives::TransactionOutput<T::Balance>>::new(),
-        );
-        calibre_aegis_crypto::AegisCryptoCore::verify_aegis_transaction(
-            &first_lock,
-            &payload.encode(),
-            &witness,
-        )
-        .ok()?;
-
-        let mut total = T::Balance::default();
-        for input in inputs {
-            let h = pallet::Pallet::<T>::calculate_utxo_hash(input.tx_hash, input.output_index);
-            let utxo = pallet::UtxoSet::<T>::get(h)?;
-            total = total.saturating_add(utxo.value);
+        let payload = calibre_primitives::staking_bond_payload(&genesis_hash, beneficiary, inputs);
+        let (total, ids) = Self::validate_inputs(inputs, witness_bytes, &payload).ok()?;
+        for h in ids {
             pallet::UtxoSet::<T>::remove(h);
         }
         pallet::Pallet::<T>::mark_utxo_set_dirty();

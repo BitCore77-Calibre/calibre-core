@@ -73,23 +73,61 @@ pub trait FeeMinter<Balance, Lock> {
 /// Consume UTXOs (verify witness, remove from set, decrement TotalIssuance).
 /// Implemented by pallet-qutxo; used by pallet-stake to burn user funds into
 /// the staking ledger.
-pub trait UtxoConsumer<Balance> {
-    /// Verify the AEGIS witness against the first input's lock, then remove
-    /// every input from the UTXO set. Returns the total consumed value, or
-    /// `None` if any input is missing or the witness fails verification.
+pub trait UtxoConsumer<Balance, AccountId> {
+    /// Require bounded, distinct inputs with one shared lock and verify the
+    /// AEGIS witness against that lock and staking_bond_payload using the
+    /// runtime's genesis hash and the supplied beneficiary before removing
+    /// any inputs. The staking pallet must supply its signed caller. Returns
+    /// the total consumed value, or `None` without state changes on failure.
     /// On success, decrements `TotalIssuance` by the consumed amount.
     fn consume_with_witness(
+        beneficiary: &AccountId,
         inputs: &[TransactionInput],
         witness: &[u8],
     ) -> Option<Balance>;
 }
 
-impl<Balance: Default + Copy> UtxoConsumer<Balance> for () {
-    fn consume_with_witness(_inputs: &[TransactionInput], _witness: &[u8]) -> Option<Balance> {
-        Some(Balance::default())
+impl<Balance, AccountId> UtxoConsumer<Balance, AccountId> for () {
+    fn consume_with_witness(_beneficiary: &AccountId, _inputs: &[TransactionInput], _witness: &[u8]) -> Option<Balance> {
+        None
     }
+}
+
+/// Versioned SCALE signing domain. Encoded as a byte slice (with a compact
+/// length), followed by the chain hash, account ID and exact ordered inputs.
+pub const STAKING_BOND_DOMAIN: &[u8] = b"CALIBRE::stake::bond::v1";
+
+/// Canonical bond authorization shared by offline tools and runtime.
+/// The runtime supplies its own genesis hash and the signed extrinsic caller;
+/// neither may be taken from untrusted witness fields. Old transfer-style
+/// signatures over (inputs, []) are deliberately incompatible.
+pub fn staking_bond_payload<Hash: Encode, AccountId: Encode>(
+    genesis_hash: &Hash,
+    beneficiary: &AccountId,
+    inputs: &[TransactionInput],
+) -> sp_std::vec::Vec<u8> {
+    (STAKING_BOND_DOMAIN, genesis_hash, beneficiary, inputs).encode()
 }
 
 impl<Balance, Lock> FeeMinter<Balance, Lock> for () {
     fn mint_to_lock(_value: Balance, _lock: Lock) {}
+}
+
+#[cfg(test)]
+mod staking_tests {
+    use super::*;
+
+    #[test]
+    fn absent_consumer_fails_closed() {
+        assert_eq!(<() as UtxoConsumer<u128, u64>>::consume_with_witness(&1, &[], &[]), None);
+    }
+
+    #[test]
+    fn account_id32_encodes_like_raw_account_bytes() {
+        let bytes = [0x22; 32];
+        let account = sp_runtime::AccountId32::new(bytes);
+        let genesis = sp_core::H256::repeat_byte(0x11);
+        assert_eq!(staking_bond_payload(&genesis, &account, &[]),
+            staking_bond_payload(&genesis, &bytes, &[]));
+    }
 }

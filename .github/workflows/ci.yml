@@ -28,7 +28,7 @@ jobs:
         uses: ./.github/actions/macos-dependencies
 
       - name: Build the template
-        run: cargo build
+        run: cargo build --locked --workspace
         timeout-minutes: 90
 
       - name: Run clippy
@@ -38,11 +38,11 @@ jobs:
         timeout-minutes: 30
 
       - name: Run the tests
-        run: SKIP_WASM_BUILD=1 cargo test
+        run: SKIP_WASM_BUILD=1 cargo test --locked --workspace
         timeout-minutes: 15
 
       - name: Build the docs
-        run: SKIP_WASM_BUILD=1 cargo doc --workspace --no-deps
+        run: SKIP_WASM_BUILD=1 cargo doc --locked --workspace --no-deps
         timeout-minutes: 15
 
   run-node:
@@ -61,7 +61,7 @@ jobs:
         uses: ./.github/actions/macos-dependencies
 
       - name: Build the node individually in release mode
-        run: cargo build --package solochain-template-node --release
+        run: cargo build --locked --package solochain-template-node --release
         timeout-minutes: 90
 
       - name: Make sure the node is producing blocks

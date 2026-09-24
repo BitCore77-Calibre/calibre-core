@@ -19,6 +19,7 @@ frame_support::construct_runtime!(
     pub enum Test {
         System: frame_system,
         Qutxo: pallet_qutxo,
+        Stake: pallet_stake,
     }
 );
 
@@ -66,6 +67,16 @@ impl pallet_qutxo::Config for Test {
     type MaxTxOutputs = ConstU32<16>;
 	type WeightInfo = ();
 	type FeeHandler = TestFeeHandler;
+}
+
+impl pallet_stake::Config for Test {
+    type RuntimeEvent = RuntimeEvent;
+    type Balance = u128;
+    type MaxBondInputs = ConstU32<16>;
+    type MinValidatorStake = frame_support::traits::ConstU128<1>;
+    type UtxoConsumer = Qutxo;
+    type UtxoMinter = Qutxo;
+    type WeightInfo = ();
 }
 
 thread_local! {
@@ -609,5 +620,306 @@ fn total_issuance_unchanged_on_failed_tx() {
         // No state change on failure.
         assert_eq!(TotalIssuance::<Test>::get(), 1_000);
         assert!(UtxoSet::<Test>::get(genesis_hash).is_some());
+    });
+}
+
+// Ownership must cover every input, not just the first input in the payload.
+fn two_input_tx(same_owner: bool, outputs: Vec<TransactionOutput<u128>>) -> Transaction<u128> {
+    let inputs = vec![
+        TransactionInput { tx_hash: H256::repeat_byte(70), output_index: 0 },
+        TransactionInput { tx_hash: H256::repeat_byte(71), output_index: 0 },
+    ];
+    let (lock, tx) = real_signed_tx(inputs, outputs);
+    for (i, input) in tx.inputs.iter().enumerate() {
+        let input_lock = if i == 0 || same_owner {
+            lock.clone()
+        } else {
+            QuantumLock::AegisThreshold([99; 32])
+        };
+        UtxoSet::<Test>::insert(
+            Qutxo::calculate_utxo_hash(input.tx_hash, input.output_index),
+            Utxo { value: 100, lock: input_lock },
+        );
+    }
+    TotalIssuance::<Test>::put(200);
+    tx
+}
+
+#[test]
+fn mixed_owner_inputs_rejected_at_pool_admission() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(false, vec![]);
+        assert_invalid(run_validate_unsigned(tx), InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn mixed_owner_inputs_rejected_at_dispatch_without_state_changes() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(false, vec![]);
+        assert_noop!(
+            Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx),
+            Error::<Test>::InvalidPqSignature
+        );
+    });
+}
+
+#[test]
+fn mixed_owner_inputs_rejected_by_staking_consumer_without_state_changes() {
+    use calibre_primitives::UtxoConsumer;
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(false, 42, System::block_hash(0));
+        frame_support::assert_storage_noop!({
+            assert_eq!(Qutxo::consume_with_witness(&42, &tx.inputs, &tx.witness), None);
+        });
+    });
+}
+
+#[test]
+fn same_owner_multi_input_spend_remains_valid() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![TransactionOutput {
+            value: 190, lock: QuantumLock::AegisThreshold([9; 32]),
+        }]);
+        assert!(run_validate_unsigned(tx.clone()).is_ok());
+        assert_ok!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx));
+        assert_eq!(TotalIssuance::<Test>::get(), 190);
+        assert_eq!(UtxoSet::<Test>::iter().count(), 1);
+    });
+}
+
+#[test]
+fn same_owner_multi_input_staking_consumer_remains_valid() {
+    use calibre_primitives::UtxoConsumer;
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, System::block_hash(0));
+        assert_eq!(Qutxo::consume_with_witness(&42, &tx.inputs, &tx.witness), Some(200));
+        assert_eq!(TotalIssuance::<Test>::get(), 0);
+        assert_eq!(UtxoSet::<Test>::iter().count(), 0);
+    });
+}
+
+fn assert_input_failure(tx: Transaction<u128>, dispatch_error: Error<Test>, pool_error: InvalidTransaction) {
+    use calibre_primitives::UtxoConsumer;
+    frame_support::assert_storage_noop!({
+        assert_invalid(run_validate_unsigned(tx.clone()), pool_error);
+        assert_noop!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx.clone()), dispatch_error);
+        assert_eq!(Qutxo::consume_with_witness(&42, &tx.inputs, &tx.witness), None);
+    });
+}
+
+#[test]
+fn missing_later_input_does_not_partially_consume() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![]);
+        UtxoSet::<Test>::remove(Qutxo::calculate_utxo_hash(tx.inputs[1].tx_hash, 0));
+        TotalIssuance::<Test>::put(100);
+        assert_input_failure(tx, Error::<Test>::UtxoDoesNotExist, InvalidTransaction::Stale);
+    });
+}
+
+#[test]
+fn duplicate_inputs_rejected_without_partial_consumption() {
+    new_test_ext().execute_with(|| {
+        let mut tx = two_input_tx(true, vec![]);
+        tx.inputs[1] = tx.inputs[0].clone();
+        assert_input_failure(tx, Error::<Test>::DuplicateInput, InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn empty_inputs_rejected_without_panic() {
+    new_test_ext().execute_with(|| {
+        let mut tx = two_input_tx(true, vec![]);
+        tx.inputs.clear();
+        assert_input_failure(tx, Error::<Test>::EmptyInputs, InvalidTransaction::ExhaustsResources);
+    });
+}
+
+#[test]
+fn oversized_inputs_rejected_on_all_paths() {
+    new_test_ext().execute_with(|| {
+        let mut tx = two_input_tx(true, vec![]);
+        tx.inputs = vec![tx.inputs[0].clone(); 17];
+        assert_input_failure(tx, Error::<Test>::TransactionTooLarge, InvalidTransaction::ExhaustsResources);
+    });
+}
+
+#[test]
+fn oversized_witness_rejected_on_all_paths() {
+    new_test_ext().execute_with(|| {
+        let mut tx = two_input_tx(true, vec![]);
+        tx.witness = vec![0; 8193];
+        assert_input_failure(tx, Error::<Test>::InvalidPqSignature, InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn unsupported_later_input_lock_rejected_on_all_paths() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![]);
+        let id = Qutxo::calculate_utxo_hash(tx.inputs[1].tx_hash, 0);
+        UtxoSet::<Test>::mutate(id, |u| u.as_mut().unwrap().lock = QuantumLock::SingleSig([1; 32]));
+        assert_input_failure(tx, Error::<Test>::InvalidPqSignature, InvalidTransaction::BadProof);
+    });
+}
+
+#[test]
+fn input_value_overflow_is_rejected_on_all_paths() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![]);
+        let id = Qutxo::calculate_utxo_hash(tx.inputs[0].tx_hash, 0);
+        UtxoSet::<Test>::mutate(id, |u| u.as_mut().unwrap().value = u128::MAX);
+        assert_input_failure(tx, Error::<Test>::ValueOverflow, InvalidTransaction::Payment);
+    });
+}
+
+#[test]
+fn overspend_is_rejected_before_any_state_change() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![TransactionOutput {
+            value: 201, lock: QuantumLock::AegisThreshold([9; 32]),
+        }]);
+        assert_invalid(run_validate_unsigned(tx.clone()), InvalidTransaction::Payment);
+        assert_noop!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx), Error::<Test>::ValueMismatch);
+    });
+}
+
+#[test]
+fn output_value_overflow_is_rejected_before_any_state_change() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![
+            TransactionOutput { value: u128::MAX, lock: QuantumLock::AegisThreshold([9; 32]) },
+            TransactionOutput { value: 1, lock: QuantumLock::AegisThreshold([9; 32]) },
+        ]);
+        assert_invalid(run_validate_unsigned(tx.clone()), InvalidTransaction::Payment);
+        assert_noop!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx), Error::<Test>::ValueOverflow);
+    });
+}
+
+#[test]
+fn dispatch_cannot_bypass_minimum_fee() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![TransactionOutput {
+            value: 200, lock: QuantumLock::AegisThreshold([9; 32]),
+        }]);
+        set_min_fee(1);
+        assert_invalid(run_validate_unsigned(tx.clone()), InvalidTransaction::Payment);
+        assert_noop!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx), Error::<Test>::FeeTooLow);
+    });
+}
+
+#[test]
+fn staking_bond_rejects_mixed_owners_without_crediting_stake() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(false, 42, System::block_hash(0));
+        assert_noop!(
+            Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed
+        );
+        assert_eq!(Stake::stake_of(42), 0);
+        assert_eq!(Stake::total_staked(), 0);
+        assert_eq!(TotalIssuance::<Test>::get(), 200);
+    });
+}
+
+#[test]
+fn staking_bond_consumes_same_owner_inputs_and_credits_exact_amount() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, System::block_hash(0));
+        assert_ok!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness));
+        assert_eq!(Stake::stake_of(42), 200);
+        assert_eq!(Stake::total_staked(), 200);
+        assert_eq!(TotalIssuance::<Test>::get(), 0);
+        assert_eq!(UtxoSet::<Test>::iter().count(), 0);
+    });
+}
+
+#[test]
+fn staking_rejects_legacy_unbound_witness() {
+    new_test_ext().execute_with(|| {
+        let tx = two_input_tx(true, vec![]);
+        assert_noop!(
+            Stake::bond(RuntimeOrigin::signed(99), tx.inputs, tx.witness),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed
+        );
+    });
+}
+
+fn bond_fixture(same_owner: bool, beneficiary: u64, genesis_hash: H256) -> Transaction<u128> {
+    let mut tx = two_input_tx(same_owner, vec![]);
+    let kp = dilithium::MlDsaKeyPair::generate(dilithium::ML_DSA_44).expect("test keygen");
+    let pk = kp.public_key().to_vec();
+    let lock = QuantumLock::AegisThreshold(sp_core::hashing::blake2_256(&pk));
+    for (i, input) in tx.inputs.iter().enumerate() {
+        if i == 0 || same_owner {
+            UtxoSet::<Test>::mutate(Qutxo::calculate_utxo_hash(input.tx_hash, input.output_index),
+                |utxo| utxo.as_mut().unwrap().lock = lock.clone());
+        }
+    }
+    let payload = calibre_primitives::staking_bond_payload(&genesis_hash, &beneficiary, &tx.inputs);
+    tx.witness = AegisWitness {
+        pub_keys: vec![pk],
+        aggregated_signature: kp.sign(&payload, b"").unwrap().as_bytes().to_vec(),
+        attestation: DeviceAttestation {
+            hardware_signature: vec![], app_binary_hash: [0; 32], backend_challenge: [0; 32],
+        },
+        time_drift: 0,
+    }.encode();
+    tx
+}
+
+#[test]
+fn staking_rejects_beneficiary_substitution_then_accepts_intended_account() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, System::block_hash(0));
+        assert_noop!(
+            Stake::bond(RuntimeOrigin::signed(99), tx.inputs.clone(), tx.witness.clone()),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed
+        );
+        assert_eq!(Stake::stake_of(99), 0);
+        assert_ok!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness));
+        assert_eq!(Stake::stake_of(42), 200);
+    });
+}
+
+#[test]
+fn staking_rejects_other_chain_signature() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, H256::repeat_byte(200));
+        assert_noop!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed);
+    });
+}
+
+#[test]
+fn staking_rejects_reordered_inputs() {
+    new_test_ext().execute_with(|| {
+        let mut tx = bond_fixture(true, 42, System::block_hash(0));
+        tx.inputs.swap(0, 1);
+        assert_noop!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed);
+    });
+}
+
+#[test]
+fn staking_witness_cannot_authorize_transfer_or_burn() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, System::block_hash(0));
+        assert_invalid(run_validate_unsigned(tx.clone()), InvalidTransaction::BadProof);
+        assert_noop!(Qutxo::execute_utxo_tx(RuntimeOrigin::none(), tx),
+            Error::<Test>::InvalidPqSignature);
+    });
+}
+
+#[test]
+fn staking_replay_cannot_credit_twice() {
+    new_test_ext().execute_with(|| {
+        let tx = bond_fixture(true, 42, System::block_hash(0));
+        assert_ok!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs.clone(), tx.witness.clone()));
+        assert_noop!(Stake::bond(RuntimeOrigin::signed(42), tx.inputs, tx.witness),
+            pallet_stake::Error::<Test>::UtxoConsumeFailed);
+        assert_eq!(Stake::stake_of(42), 200);
+        assert_eq!(Stake::total_staked(), 200);
     });
 }

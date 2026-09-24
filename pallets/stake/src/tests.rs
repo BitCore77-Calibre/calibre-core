@@ -9,7 +9,7 @@ use sp_runtime::BuildStorage;
 type Block = frame_system::mocking::MockBlock<Test>;
 
 thread_local! {
-    static CONSUMED: std::cell::RefCell<Vec<(usize, Vec<u8>)>> =
+    static CONSUMED: std::cell::RefCell<Vec<(u64, usize, Vec<u8>)>> =
         std::cell::RefCell::new(Vec::new());
     static CONSUME_RESULT: std::cell::RefCell<Option<u128>> =
         std::cell::RefCell::new(None);
@@ -18,9 +18,9 @@ thread_local! {
 }
 
 pub struct TestUtxoConsumer;
-impl UtxoConsumer<u128> for TestUtxoConsumer {
-    fn consume_with_witness(inputs: &[TransactionInput], witness: &[u8]) -> Option<u128> {
-        CONSUMED.with(|c| c.borrow_mut().push((inputs.len(), witness.to_vec())));
+impl UtxoConsumer<u128, u64> for TestUtxoConsumer {
+    fn consume_with_witness(beneficiary: &u64, inputs: &[TransactionInput], witness: &[u8]) -> Option<u128> {
+        CONSUMED.with(|c| c.borrow_mut().push((*beneficiary, inputs.len(), witness.to_vec())));
         CONSUME_RESULT.with(|r| *r.borrow())
     }
 }
@@ -63,6 +63,7 @@ impl pallet_stake::Config for Test {
 
 fn new_test_ext() -> sp_io::TestExternalities {
     set_consume_result(None);
+    CONSUMED.with(|c| c.borrow_mut().clear());
     let _ = take_minted();
     frame_system::GenesisConfig::<Test>::default()
         .build_storage()
@@ -81,6 +82,7 @@ fn bond_credits_stake_and_total() {
         assert_ok!(Stake::bond(RuntimeOrigin::signed(1), vec![dummy_input()], vec![7, 7]));
         assert_eq!(Stake::stake_of(1u64), 1_000);
         assert_eq!(Stake::total_staked(), 1_000);
+        CONSUMED.with(|c| assert_eq!(*c.borrow(), vec![(1, 1, vec![7, 7])]));
     });
 }
 

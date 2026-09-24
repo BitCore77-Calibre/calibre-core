@@ -5,7 +5,9 @@ proven by which commit. If you're new to the repo, read this first. If you're
 returning after weeks away, read this first. If the website roadmap and this
 file disagree, this file wins.
 
-**Last updated:** 2026-09-23 at commit `5431db1` on `main`.
+**Last updated:** 2026-09-24, reviewed repairs based on `ec400e4`.
+The historical tables below retain their original commit anchors; current
+validation and limitations are in [REVIEW_REPAIRS.md](REVIEW_REPAIRS.md).
 
 ---
 
@@ -190,9 +192,10 @@ Protocol-level choices, with rationale.
 
 ---
 
-## Open debt
+## Historical open debt (superseded by later commits)
 
-Three items. Each small, independent, none blocks functionality.
+These entries describe the earlier checkpoint, not the current repair branch.
+For current scope and limitations see [the repair record](REVIEW_REPAIRS.md).
 
 **1. `TotalIssuance` stale on `execute_utxo_tx`.** The `UtxoConsumer` trait
 (used by stake) decrements correctly. The original path doesn't. Fix
@@ -230,6 +233,47 @@ that is functionally burned.
 Live site: https://bitcore77-calibre.github.io/calibre-core/
 
 ---
+
+## 2026-09-24 — Local GitHub-review repairs
+
+Based on local BABE commit `ec400e4`, with no publication or deployment.
+
+- Reproduced mixed-owner acceptance at pool, dispatch and staking-consumer
+  boundaries before repair. Added one shared read-only validator requiring the
+  same authorized lock on every input and completing checks before consumption.
+- Added rejection and positive integration tests, including the actual staking
+  bond call. Execution now enforces minimum fees and checked value sums.
+- Bumped runtime spec version to 101; retained transaction encoding/storage.
+- Fixed pinned Rust 1.88 Clippy setup on macOS; made CI build/test/doc resolution
+  locked. macOS and hosted CI still require their own runs.
+- Reconciled website source with the published page's later feature sections,
+  corrected consensus/finality/throughput claims, and added a fresh-BABE guide.
+- Standardized CALIBRE-owned license wording on Unlicense; retained upstream
+  notices and the separate Apache-2.0 notice under `zk/`.
+
+See [REVIEW_REPAIRS.md](REVIEW_REPAIRS.md) for validation and remaining limits.
+The user requested all changes remain local for review.
+
+## 2026-09-24 — Authorized staking-signature follow-up
+
+- Reproduced acceptance of an unbound legacy witness by an arbitrary staking
+  caller, then rejected that format without a fallback.
+- Runtime 102 verifies SCALE(domain-v1, genesis hash, beneficiary, inputs).
+  The staking caller is supplied by the signed origin; the genesis hash comes
+  from runtime storage. Shared primitives also drive the offline payload encoder.
+- Added recipient-substitution, chain-substitution, input-order, cross-operation
+  and replay regressions, plus signer AccountId32 encoding/signature tests.
+- No new signing server, custody flow, storage migration, deployment or
+  publication. See [signing compatibility](STAKING_SIGNATURES.md).
+
+## 2026-09-24 — Publication authorized
+
+After the local review and staking-signature follow-up, the user authorized
+saving, committing and publishing the completed work to GitHub, including
+the corrected website source. Earlier local-only restrictions above are
+historical. Publication does not authorize a validator deployment or
+live-chain migration. Runtime 102 still requires fresh integration testing
+before any operational rollout; the prototype is not approved for real funds.
 
 ## How to update this file
 

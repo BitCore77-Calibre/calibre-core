@@ -30,6 +30,7 @@
     <a href="#proof">Proof</a>
     <a href="#quickstart">Quick Start</a>
     <a href="#roadmap">Roadmap</a>
+    <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/PROJECT_LOG.md">Project Log</a>
     <a href="https://github.com/BitCore77-Calibre/calibre-core" class="nav-cta">GitHub →</a>
   </div>
 </nav>
@@ -38,7 +39,7 @@
   <div class="hero-inner">
     <div class="hero-badge">
       <span class="pulse"></span>
-      Testnet v0.6.0 live · chain <code>calibre_testnet_1</code>
+      Research prototype · BABE tested locally
     </div>
     <h1>
       Post-quantum digital cash,<br>
@@ -48,10 +49,10 @@
       A quantum-resistant Layer-1 with <b>real ML-DSA-44 signatures verified
       inside the runtime</b>. Every spend is a cryptographic claim on an
       unspent output — signed with lattice math, checked by four independent
-      gates, and settled by a Fast-Path mempool.
+      gates, then included in blocks and finalized by GRANDPA.
     </p>
     <p class="lead-sub">
-      No accounts. No nonces. No elliptic curves in the value path.
+      Q-UTXO spends use lattice signatures. Consensus and staking have separate accounts and keys.
     </p>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/docs/whitepaper/README.md">
@@ -64,8 +65,8 @@
     <div class="hero-stats">
       <div><b>FIPS 204</b><span>signature standard</span></div>
       <div><b>4</b><span>verification gates</span></div>
-      <div><b>μs</b><span>double-spend rejection</span></div>
-      <div><b>6s</b><span>block finality</span></div>
+      <div><b>UTXO</b><span>input conflict checks</span></div>
+      <div><b>6s</b><span>BABE slot duration</span></div>
     </div>
   </div>
   <div class="hero-visual" aria-hidden="true">
@@ -106,11 +107,11 @@
     <span class="trust-sep">·</span>
     <span class="trust-item">Substrate</span>
     <span class="trust-sep">·</span>
-    <span class="trust-item">Rust 1.85</span>
+    <span class="trust-item">Rust 1.88</span>
     <span class="trust-sep">·</span>
     <span class="trust-item">Docker</span>
     <span class="trust-sep">·</span>
-    <span class="trust-item">GPL-3.0-only</span>
+    <span class="trust-item">Unlicense</span>
   </div>
 </section>
 
@@ -121,7 +122,7 @@
       <b>Post-quantum signatures are 35× larger than ECDSA.</b>
       Every existing chain is struggling with the throughput cost.
       Calibre was <em>designed around that constraint</em> from the first line of code —
-      using UTXO aggregation, parallel verification, and Fast-Path mempool settlement.
+      using same-owner input aggregation and mempool conflict detection. Finality still requires consensus.
       <a href="#size-math">See the engineering →</a>
     </div>
   </div>
@@ -255,7 +256,7 @@
     <h2>Five layers, one invariant.</h2>
     <p class="section-lead">
       Every unit of value is an unspent output bound to a post-quantum lock.
-      No accounts. No nonces. No elliptic curves in the value path.
+      Q-UTXO spends use lattice signatures. Consensus and staking have separate accounts and keys.
     </p>
   </div>
 
@@ -291,7 +292,7 @@
       <rect x="20" y="175" width="860" height="100" rx="10" fill="url(#lay2)" stroke="#8957e5" stroke-opacity="0.3"/>
       <text x="60" y="205" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">Fast-Path Mempool</text>
       <text x="60" y="225" fill="#8b949e" font-family="ui-monospace" font-size="10">per-input conflict tags</text>
-      <text x="60" y="245" fill="#8b949e" font-family="ui-monospace" font-size="10">double-spends rejected in μs</text>
+      <text x="60" y="245" fill="#8b949e" font-family="ui-monospace" font-size="10">competing input detection</text>
       <path d="M 300 225 L 350 225" stroke="#8957e5" stroke-width="1.5" marker-end="url(#arr)"/>
       <text x="370" y="205" fill="#e6edf3" font-family="ui-monospace" font-size="13" font-weight="700">pallet-qutxo</text>
       <text x="370" y="225" fill="#8b949e" font-family="ui-monospace" font-size="10">state machine</text>
@@ -316,7 +317,7 @@
 
       <text x="20" y="470" fill="#8b949e" font-family="ui-monospace" font-size="11" letter-spacing="2">CONSENSUS LAYER</text>
       <rect x="20" y="480" width="860" height="30" rx="6" fill="#0d1117" stroke="#3fb950" stroke-opacity="0.3"/>
-      <text x="60" y="500" fill="#3fb950" font-family="ui-monospace" font-size="12">Aura (6s slots) · GRANDPA (finality) · n=7 f=2</text>
+      <text x="60" y="500" fill="#3fb950" font-family="ui-monospace" font-size="12">BABE (6s slots) · GRANDPA · 7-node local test</text>
     </svg>
   </div>
 
@@ -346,32 +347,32 @@
       <h3>UTXO aggregation</h3>
       <p>
         In an account model, every spend generates its own signature. In a
-        UTXO model, ten inputs can be combined into a single transaction with
-        <b>one signature</b>.
+        UTXO model, ten inputs with the <b>same authorized lock</b> can be combined
+        into a single transaction with one signature. Mixed owners are rejected.
       </p>
-      <div class="tech-badge">10 UTXOs → 1 signature</div>
+      <div class="tech-badge">Same owner · multiple inputs · 1 signature</div>
     </article>
 
     <article class="tech">
       <div class="tech-num">02</div>
       <h3>Mempool-level conflict detection</h3>
       <p>
-        Non-conflicting transactions are verified in parallel. The mempool
-        knows <em>syntactically</em> that Tx-A and Tx-B don't touch the same
-        UTXO — no sequential execution required.
+        Each transaction provides an input tag for every UTXO it consumes.
+        These tags let the pool identify competing spends. The runtime checks
+        ownership and availability again when executing the transaction.
       </p>
-      <div class="tech-badge">Parallel verification</div>
+      <div class="tech-badge">Per-input conflict tags</div>
     </article>
 
     <article class="tech">
       <div class="tech-num">03</div>
-      <h3>Fast-Path settlement</h3>
+      <h3>Pool admission, then finality</h3>
       <p>
-        Transactions with no conflicting inputs broadcast and settle
-        immediately, without waiting for block production. A 6-second block
-        time becomes the <b>worst case</b>, not the typical case.
+        Pool acceptance is provisional. Transactions must be included in a
+        block and finalized by GRANDPA before they are treated as settled.
+        The <b>6-second slot</b> is not a finality deadline.
       </p>
-      <div class="tech-badge">Sub-second for non-conflicting</div>
+      <div class="tech-badge">Admission ≠ settlement</div>
     </article>
 
     <article class="tech">
@@ -387,7 +388,7 @@
   </div>
 
   <div class="throughput-visual">
-    <h3>Why this works: the throughput math</h3>
+    <h3>Transaction size and throughput</h3>
     <div class="tp-comparison">
       <div class="tp-col">
         <div class="tp-header bad">Naive PQC on Bitcoin</div>
@@ -402,19 +403,18 @@
       <div class="tp-col">
         <div class="tp-header good">Calibre</div>
         <ul>
-          <li>Substrate block limits (dynamic)</li>
-          <li>Each tx: ~4,000 bytes, but aggregated</li>
-          <li>Parallel verification of non-conflicting</li>
-          <li>6s block time</li>
-          <li class="tp-total good">≈ 100+ TPS base, scaling with inputs</li>
+          <li>Runtime block length and weight limits</li>
+          <li>One witness for same-owner inputs</li>
+          <li>Per-input pool conflict detection</li>
+          <li>6s BABE slot duration</li>
+          <li class="tp-total good">BABE throughput: not benchmarked</li>
         </ul>
       </div>
     </div>
     <p class="tp-foot">
-      Throughput is bounded by <b>bandwidth</b>, not cryptography. Multi-core
-      CPUs verify hundreds of Dilithium signatures per second; the bottleneck
-      is how fast the network can gossip the bytes. UTXO aggregation reduces
-      the number of signatures required for the same economic activity.
+      The left column is illustrative arithmetic, not a measured comparison.
+      Actual throughput depends on verification, block limits, hardware and networking.
+      The local BABE epoch test measured consensus continuity, not TPS.
     </p>
   </div>
 </section>
@@ -532,7 +532,7 @@
       <div class="layer-body">
         <h3>Mempool (Fast-Path Conflict Detector)</h3>
         <p>
-          Per-input conflict tags reject double-spends in microseconds.
+          Per-input conflict tags identify competing spends.
           Non-conflicting transactions broadcast in parallel without waiting
           for block production. Replay attacks hit the stale gate before
           touching block space.
@@ -544,13 +544,13 @@
     <div class="layer">
       <div class="layer-num">L1</div>
       <div class="layer-body">
-        <h3>Consensus (Aura + GRANDPA)</h3>
+        <h3>Consensus (BABE + GRANDPA)</h3>
         <p>
-          Slot-based block production (Aura, 6s) plus Byzantine-fault-tolerant
-          finality (GRANDPA). Current testnet supports n=7 validators with
-          f=2 Byzantine tolerance. Multi-validator launcher under development.
+          BABE uses 6-second slots; GRANDPA finalizes blocks. Seven local validators
+          crossed the one-hour epoch boundary and finalized block 612 on the
+          baseline build. This does not establish public-network or fault tolerance under attack.
         </p>
-        <span class="layer-status progress">n=7 spec shipped</span>
+        <span class="layer-status progress">7-validator local epoch test</span>
       </div>
     </div>
 
@@ -585,7 +585,7 @@
         collide in the pool graph.
       </div>
       <div class="gate-reject">→ <code>Priority is too low</code></div>
-      <div class="gate-time">~microseconds</div>
+      <div class="gate-time">Pool admission</div>
     </div>
 
     <div class="gate-arrow">→</div>
@@ -598,7 +598,7 @@
         the state boundary before touching the block producer.
       </div>
       <div class="gate-reject">→ <code>Transaction is outdated</code></div>
-      <div class="gate-time">~1ms</div>
+      <div class="gate-time">State validation</div>
     </div>
 
     <div class="gate-arrow">→</div>
@@ -611,7 +611,7 @@
         <code>blake2_256(pk) == lock</code>. Prevents key substitution.
       </div>
       <div class="gate-reject">→ <code>LockMismatch</code></div>
-      <div class="gate-time">~10μs</div>
+      <div class="gate-time">Every input lock</div>
     </div>
 
     <div class="gate-arrow">→</div>
@@ -621,10 +621,10 @@
       <div class="gate-name">Cryptography</div>
       <div class="gate-desc">
         Real FIPS 204 ML-DSA-44 verification inside the WASM runtime.
-        A forged signature cannot pass this gate — ever.
+        Invalid signatures are rejected; this is not a claim of audited security.
       </div>
       <div class="gate-reject">→ <code>SignatureVerificationFailed</code></div>
-      <div class="gate-time">~500μs</div>
+      <div class="gate-time">ML-DSA verification</div>
     </div>
   </div>
 
@@ -637,7 +637,7 @@
     <article class="proof">
       <div class="proof-icon">✓</div>
       <h3>Forgery rejection proven</h3>
-      <p>A random 2,420-byte signature is accepted by the mempool and rejected at block execution. The UTXO set is unchanged.</p>
+      <p>Invalid signatures are checked at pool admission and again at execution. Failed validation leaves the UTXO set unchanged.</p>
     </article>
     <article class="proof">
       <div class="proof-icon">✓</div>
@@ -727,19 +727,26 @@
     <div class="reality-col">
       <div class="reality-head shipped-head">
         <span class="reality-dot"></span>
-        SHIPPED · TESTNET v0.6.0
+        IMPLEMENTED · RESEARCH PROTOTYPE
       </div>
       <ul class="reality-list">
         <li><b>Q-UTXO state model</b><span>pallet-qutxo, conservation of mass unit-tested</span></li>
         <li><b>Real ML-DSA-44 verification on-chain</b><span>WASM runtime calls MlDsaKeyPair::verify on every spend</span></li>
-        <li><b>Lock binding (blake2 hash)</b><span>witness pubkey must match UTXO.lock — enforced</span></li>
-        <li><b>Fast-Path conflict detector</b><span>per-input mempool tags, double-spend rejected in μs</span></li>
+        <li><b>Every-input lock binding</b><span>one witness authorizes the identical lock on every input; mixed owners rejected</span></li>
+        <li><b>Fast-Path conflict detector</b><span>per-input tags detect competing spends; acceptance is not finality</span></li>
         <li><b>Stale gate</b><span>replay returns Transaction is outdated</span></li>
-        <li><b>Named testnet</b><span>calibre_testnet_1 with verifiable chain-spec fingerprint</span></li>
+        <li><b>BABE local baseline</b><span>seven validators; fresh genesis; epoch transition observed</span></li>
         <li><b>HTTP faucet</b><span>POST pubkey → 1B CAL locked to that key</span></li>
-        <li><b>Docker deployment</b><span>docker compose up launches node + faucet + Prometheus</span></li>
+        <li><b>Historical Docker setup</b><span>legacy Aura configuration; not the current BABE launch path</span></li>
         <li><b>Whitepaper + diagrams</b><span>4-part spec, 6 architecture diagrams</span></li>
-        <li><b>7-authority chain spec</b><span>n=7 f=2 BFT spec committed</span></li>
+        <li><b>Fresh chain specifications</b><span>generate with the matching BABE binary; do not reuse Aura state</span></li>
+        <li><b>Fee market</b><span>EIP-1559-style dynamic base fee, 50/30/20 split, block rewards</span></li>
+        <li><b>Producer payout routing</b><span>fees and rewards mint to producer UTXO at block end; unregistered producers accrue pending, never burned</span></li>
+        <li><b>Stake pallet</b><span>bond/unbond with a burn-and-record ledger</span></li>
+        <li><b>Real ML-DSA-44 test harness</b><span>keygen + sign in tests; Phase 5 conservation test un-ignored</span></li>
+        <li><b>calibre-light v0.4</b><span>trust tier 1 + tier 2 state-proof verification; UniFFI bindings for Swift and Kotlin</span></li>
+        <li><b>On-chain ZK verifier</b><span>risc0-zkvm 3.0.6, verified end-to-end (Phase 7.4)</span></li>
+        <li><b>Merkle inclusion proofs</b><span>calibre-merkle crate + QutxoApi RPC endpoint (Phase 7.1-7.2d)</span></li>
       </ul>
     </div>
 
@@ -749,9 +756,10 @@
         IN PROGRESS
       </div>
       <ul class="reality-list">
-        <li><b>Multi-validator launcher</b><span>chain spec ready; launcher blocked on Substrate import-worker panic on non-first validators</span></li>
-        <li><b>Benchmark-derived weights</b><span>current weights are hardcoded; benchmark suite is Phase 8</span></li>
+        <li><b>Full benchmark suite</b><span>hand-derived weights in place; frame-benchmarking regeneration pending</span></li>
         <li><b>try-runtime migrations</b><span>runtime upgrades not yet supported; needed before mainnet</span></li>
+        <li><b>Production mobile app</b><span>cross-compile verified; full app build (Phase 7.6) pending</span></li>
+        <li><b>Single-node throughput limiter</b><span>empty blocks appear while txs pend; binding limit upstream of block weight</span></li>
       </ul>
 
       <div class="reality-head planned-head">
@@ -903,7 +911,7 @@
       <p class="chain-solution">
         <b>Our approach:</b> Q-UTXO state model + FIPS 204 ML-DSA-44
         verification inside WASM + four-gate verification + Fast-Path mempool
-        + UTXO aggregation for parallel verification.
+        + same-owner UTXO aggregation.
       </p>
       <p class="chain-cost">
         <b>Trade-offs we accept:</b> Larger witness data per transaction.
@@ -924,71 +932,27 @@
 
 <section id="quickstart" class="section">
   <div class="section-head">
-    <span class="section-tag">QUICK START</span>
-    <h2>Run it in 30 seconds.</h2>
+    <span class="section-tag">LOCAL DEVELOPMENT</span>
+    <h2>Start a fresh BABE chain.</h2>
     <p class="section-lead">
-      One prerequisite: Docker. Three commands to a live post-quantum testnet
-      with a faucet, console, and Prometheus metrics.
+      Build from the reviewed BABE source with Rust 1.88 and native build prerequisites.
+      The first build takes time. Source publication is not a live network upgrade.
     </p>
   </div>
-
   <div class="terminal">
     <div class="term-header">
-      <span class="dot dot-red"></span>
-      <span class="dot dot-yellow"></span>
-      <span class="dot dot-green"></span>
-      <span class="term-title">bash — calibre-core</span>
+      <span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span>
+      <span class="term-title">Repository root · development only</span>
     </div>
     <div class="term-body">
-      <div class="term-line">
-        <span class="prompt">$</span>
-        <span class="cmd">git clone https://github.com/BitCore77-Calibre/calibre-core</span>
-      </div>
-      <div class="term-line">
-        <span class="prompt">$</span>
-        <span class="cmd">cd calibre-core</span>
-      </div>
-      <div class="term-line">
-        <span class="prompt">$</span>
-        <span class="cmd">docker compose up</span>
-      </div>
-      <div class="term-out">
-        ✔ Network calibre-template_default  Created<br>
-        ✔ Container calibre-node            Healthy<br>
-        ✔ Container calibre-faucet          Started<br>
-        ✔ Container calibre-prometheus      Started
-      </div>
-      <div class="term-line">
-        <span class="prompt">$</span>
-        <span class="cmd">docker compose exec node pq-signer keygen &gt; pubkey.txt</span>
-      </div>
-      <div class="term-line">
-        <span class="prompt">$</span>
-        <span class="cmd">curl -X POST http://127.0.0.1:8090/faucet \</span>
-      </div>
-      <div class="term-line">
-        <span class="prompt"> </span>
-        <span class="cmd">&nbsp;&nbsp;-H 'Content-Type: application/json' \</span>
-      </div>
-      <div class="term-line">
-        <span class="prompt"> </span>
-        <span class="cmd">&nbsp;&nbsp;-d "{\"pubkey\": \"$(cat pubkey.txt)\"}"</span>
-      </div>
-      <div class="term-out success">
-        {<br>
-        &nbsp;&nbsp;"ok": true,<br>
-        &nbsp;&nbsp;"lock_hash": "0x13e5eea4...",<br>
-        &nbsp;&nbsp;"amount": 1000000000,<br>
-        &nbsp;&nbsp;"tx_hash": "0x6c45d5b2..."<br>
-        }
-      </div>
+      <div class="term-line"><span class="prompt">$</span><span class="cmd">cargo build --locked --release -p solochain-template-node</span></div>
+      <div class="term-line"><span class="prompt">$</span><span class="cmd">./target/release/solochain-template-node --dev --tmp --no-telemetry</span></div>
     </div>
   </div>
-
   <div class="qs-note">
-    You now hold <b>1,000,000,000 testnet CAL</b>, cryptographically bound to
-    a Dilithium public key that only your private key can spend.
-    No accounts. No seed phrases. No elliptic curves.
+    RPC stays on <b>127.0.0.1:9944</b>. Use only disposable test funds.
+    Development keys are public. Do not reuse old Aura databases or raw specifications.
+    <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/README.md">Read the launch guide</a>.
   </div>
 </section>
 
@@ -1018,9 +982,9 @@
         <tr><td>Quantum-safe signatures</td><td>❌</td><td>❌</td><td>✅</td><td class="ours">✅</td></tr>
         <tr><td>Quantum-safe hashes</td><td>✅</td><td>✅</td><td>✅</td><td class="ours">✅</td></tr>
         <tr><td>Address derived from</td><td>hash(pk)</td><td>pk</td><td>pk</td><td class="ours">hash(Dilithium pk)</td></tr>
-        <tr><td>Mempool double-spend rejection</td><td>❌</td><td>❌</td><td>❌</td><td class="ours">✅</td></tr>
-        <tr><td>Parallel verification</td><td>Partial</td><td>Partial</td><td>❌</td><td class="ours">Native</td></tr>
-        <tr><td>Forkless crypto migration</td><td>❌</td><td>⚠️</td><td>❌</td><td class="ours">✅</td></tr>
+        <tr><td>Competing spend checks</td><td>Yes</td><td>Nonce/balance rules</td><td>State rules</td><td class="ours">Per-input tags + execution checks</td></tr>
+        <tr><td>Parallel verification</td><td>Implementation-dependent</td><td>Implementation-dependent</td><td>Not assessed</td><td class="ours">Not established by this test</td></tr>
+        <tr><td>CALIBRE live runtime upgrades</td><td>—</td><td>—</td><td>—</td><td class="ours">Not validated</td></tr>
         <tr><td>Seed-phrase eliminated</td><td>❌</td><td>❌</td><td>❌</td><td class="ours">Roadmap</td></tr>
         <tr><td>Confidential transactions</td><td>❌</td><td>L2 only</td><td>❌</td><td class="ours">Roadmap</td></tr>
       </tbody>
@@ -1055,27 +1019,35 @@
         <div class="tl-status shipped">shipped</div>
       </div>
     </div>
-    <div class="tl-item next">
+    <div class="tl-item done">
       <div class="tl-marker">6.6</div>
       <div class="tl-body">
         <h3>Multi-validator testnet</h3>
-        <p>7 authorities (n=7 f=2). Chain-spec committed. Launcher deferred pending a Substrate import-worker fix.</p>
-        <div class="tl-status progress">in progress</div>
+        <p>Historical Aura/Docker results are recorded in the project log. The later local BABE baseline crossed an epoch with seven validators and finalized block 612; throughput and adversarial resilience were not tested in that run.</p>
+        <div class="tl-status shipped">shipped</div>
       </div>
     </div>
-    <div class="tl-item plan">
+    <div class="tl-item done">
+      <div class="tl-marker">6.7</div>
+      <div class="tl-body">
+        <h3>Fee market + staking</h3>
+        <p>EIP-1559-style dynamic base fee · 50/30/20 fee split · block rewards · priority fees routed 100% to producer · bond/unbond stake pallet · producer payout routing at block end.</p>
+        <div class="tl-status shipped">shipped</div>
+      </div>
+    </div>
+    <div class="tl-item next">
       <div class="tl-marker">7</div>
       <div class="tl-body">
         <h3>Light nodes + ZK state proofs</h3>
-        <p>Succinct per-block state proofs. Mobile devices verify chain state without downloading the blockchain.</p>
-        <div class="tl-status planned">planned</div>
+        <p>calibre-light v0.4 (tier-1 + tier-2 state-proof verification) shipped with UniFFI bindings for Swift and Kotlin. On-chain RISC Zero verifier live (risc0-zkvm 3.0.6). Android cross-compile verified. Production mobile app pending.</p>
+        <div class="tl-status progress">in progress</div>
       </div>
     </div>
     <div class="tl-item plan">
       <div class="tl-marker">8</div>
       <div class="tl-body">
         <h3>Audit preparation</h3>
-        <p>Benchmark-derived weights · fuzz targets for crypto and UTXO · try-runtime migrations · third-party audit · bug bounty.</p>
+        <p>Full benchmark-derived weights (hand-derived constants landed in Phase 8.9) · fuzz targets for crypto and UTXO · try-runtime migrations · third-party audit · bug bounty.</p>
         <div class="tl-status planned">planned</div>
       </div>
     </div>
@@ -1158,7 +1130,7 @@
     <article class="vision-card">
       <h3>An open protocol, not a product</h3>
       <p>
-        GPL-3.0-only. Auditable. Forkable. Anyone can inspect, fork, or
+        CALIBRE-owned code uses Unlicense; third-party notices remain. Anyone can inspect, fork, or
         contribute. The value is not in the code — the code is public. The
         value is in the network, the team, and the discipline of shipping
         verifiable claims.
@@ -1204,15 +1176,15 @@
     <div class="footer-col">
       <h4>Network</h4>
       <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/README.md">Launch guide</a>
-      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/calibre-testnet-raw.json">Chain spec</a>
-      <span class="footer-static">Chain ID <code>calibre_testnet_1</code></span>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/chain-specs/README.md#generate-a-matching-specification">Generate BABE spec</a>
+      <span class="footer-static">Local dev chain <code>dev</code></span>
       <span class="footer-static">Token <code>CAL</code></span>
     </div>
     <div class="footer-col">
       <h4>Project</h4>
       <a href="https://github.com/BitCore77-Calibre/calibre-core">GitHub repository</a>
       <a href="https://github.com/BitCore77-Calibre/calibre-core/issues">Issues</a>
-      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/LICENSE">License (GPL-3.0)</a>
+      <a href="https://github.com/BitCore77-Calibre/calibre-core/blob/main/LICENSE">License (Unlicense)</a>
     </div>
   </div>
   <div class="footer-bottom">

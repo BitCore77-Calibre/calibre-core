@@ -21,6 +21,7 @@ default = ["std"]
 std = ["parity-scale-codec/std", "scale-info/std", "frame-support/std", "frame-system/std", "sp-core/std", "sp-runtime/std", "sp-std/std", "serde/std", "calibre-primitives/std", "calibre-aegis-crypto/std", "calibre-merkle/std"]
 
 [dev-dependencies]
+pallet-stake = { workspace = true, features = ["std"] }
 sp-io = { workspace = true, features = ["std"] }
 # Real ML-DSA-44 keygen + signing for tests that exercise the full
 # AEGIS verification path. Must match the version aegis-crypto uses.

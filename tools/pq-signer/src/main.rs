@@ -8,6 +8,7 @@
 //! pq-signer keygen, which continues to work unchanged.
 
 mod identity;
+mod bond;
 
 use dilithium::{DilithiumSignature, MlDsaKeyPair, ML_DSA_44};
 use identity::Identity;
@@ -27,6 +28,7 @@ fn main() {
         "pubkey" => legacy_pubkey(),
         "sign" => legacy_sign(&args),
         "verify" => legacy_verify(&args),
+        "bond-payload" => bond::print_payload(&args),
 
         // ── new calibre-keygen commands ──
         "init" => cmd_init(&args),
@@ -64,6 +66,8 @@ fn print_help() {
     eprintln!();
     eprintln!("Legacy (docker-compose compatibility):");
     eprintln!("  keygen | pubkey | sign <hex> | verify <pk> <msg> <sig>");
+    eprintln!("  bond-payload <genesis-hash-hex> <beneficiary-account32-hex> '<inputs-json>'");
+    eprintln!("      Print canonical bond-v1 signing bytes; no keys are read and nothing is submitted.");
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -6,24 +6,24 @@ Calibre replaces elliptic-curve cryptography in the value path with NIST-standar
 
 > **Status:** Research prototype. Not audited. Not for real value transfer.
 
+Runtime 102 binds staking witnesses to the beneficiary account and chain.
+Old bond witnesses must be regenerated; see [the signing format](docs/STAKING_SIGNATURES.md).
+This repair is not an audit or approval for real-value use.
+
 ---
 
 ## Quick Start
 
-Prerequisite: [Docker](https://docs.docker.com/get-docker/).
+Use the [local BABE launch guide](chain-specs/README.md). It builds the pinned
+Rust 1.88 toolchain and starts a fresh temporary development chain.
+The first build can take substantial time.
 
-    git clone https://github.com/BitCore77-Calibre/calibre-core.git
-    cd calibre-core
-    docker compose up
+This source includes the BABE and runtime-102 security repairs, validated locally.
+Source publication is not a mainnet release or a live network upgrade.
+Existing raw Aura specifications and Docker launch recipes are historical,
+not validated BABE launch instructions. Do not reuse an Aura database.
 
-Then in another terminal:
-
-    docker compose exec node pq-signer keygen > pubkey.txt
-    curl -X POST http://127.0.0.1:8090/faucet -H "Content-Type: application/json" -d "{\"pubkey\": \"$(cat pubkey.txt)\"}"
-
-You now hold 1,000,000,000 testnet CAL, bound to a Dilithium key that only your private key can spend.
-
-## What is proven
+## Implementation and validation
 
 - Real ML-DSA-44 verification in the WASM runtime
 - Lock hash <-> pubkey binding: blake2_256(witness_pk) == UTXO.lock
@@ -31,13 +31,17 @@ You now hold 1,000,000,000 testnet CAL, bound to a Dilithium key that only your 
 - Double-spend rejection at mempool: Priority is too low
 - Replay rejection: Transaction is outdated
 - Conservation of mass: sum(inputs) >= sum(outputs) — un-ignored 2026-09-23 with real ML-DSA-44 keygen in tests
-- Under-priced tx rejection at pool admission (`InvalidTransaction::Payment`)
-- 7-validator Docker testnet: GRANDPA finality at 5/7, 1s RTT survived, 169 TPS parity
+- Under-priced tx rejection at both pool admission and runtime execution
+- Multi-input spends and staking require one identical authorized lock across every input; mixed owners, duplicates, missing inputs and value overflow are rejected before mutation
+- Local BABE baseline `ec400e4`: seven validators crossed the one-hour epoch boundary and finalized block 612. This is not a throughput, Byzantine-fault or production-readiness test
 - Fee market: EIP-1559-style dynamic base fee, 50/30/20 split, block rewards, priority fee 100% producer
 - Producer payout routing: fees mint to producer UTXO at block end; unregistered producers accrue pending, never burned
 - Stake pallet: bond/unbond with a burn-and-record ledger
 
-**68 tests passing, 0 ignored.** `SKIP_WASM_BUILD=1 cargo test --workspace`
+Run the current native tests with `SKIP_WASM_BUILD=1 cargo test --locked --workspace`.
+See [the local repair record](docs/REVIEW_REPAIRS.md) for scope and validation.
+Historical Docker throughput and latency results in the project log apply
+to their original revision, not automatically to this BABE runtime.
 
 ## Documentation
 
@@ -57,6 +61,9 @@ record of what shipped, when, and why. The single source of truth.
 
 ## Status
 
+Historical milestone groups follow. Current local BABE repair status is recorded
+in [Session state](docs/SESSION_STATE.md); these milestones are not audit signoff.
+
 | Phase | Milestone | Status |
 |---|---|---|
 | 1-5 | Q-UTXO, ML-DSA-44, Fast-Path, Console, Docker | Done |
@@ -74,7 +81,9 @@ For the full phase table with per-phase commit anchors, see
 
 ## License
 
-GPL-3.0-only. See LICENSE.
+CALIBRE-owned code: [Unlicense](LICENSE). Third-party code and dependencies
+retain their own licenses and notices, including the Apache-2.0 notice in
+`zk/LICENSE` and upstream template notices.
 
 ---
 

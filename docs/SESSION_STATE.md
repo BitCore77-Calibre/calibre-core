@@ -1,4 +1,21 @@
-## Where we are
+## Current repair and publication status — 2026-09-24
+
+- Baseline: BABE commit `ec400e4`; repairs prepared for GitHub publication.
+- Repairs are isolated on `fix/github-review-repairs`; original checkout preserved.
+- Every-input ownership validation now covers pool admission, execution and
+  staking. Runtime specification version is 102. Bond signing bytes now bind
+  the staking domain, chain genesis hash, beneficiary and exact inputs;
+  old bond signatures are rejected. Call encoding and storage layout are
+  unchanged. This is not an approved deployment or live-chain migration.
+- Seven-validator epoch evidence applies to baseline `ec400e4`, not to this
+  newly repaired runtime. See [repair record](REVIEW_REPAIRS.md).
+- CALIBRE-owned code uses Unlicense. Third-party notices are preserved.
+- The user authorized Git commits and GitHub/source-site publication after
+  local review. No validator deployment, live-chain migration or next phase is started.
+- Local validation: 127 native test executions; default/all-features Clippy
+  and native + Wasm build passed with warnings. Hosted CI results are separate.
+
+## Historical checkpoint (superseded)
 
 - **Commit:** `0b61624` (tag `v0.9.3-epochs`, pushed to origin/main)
 - **Phase:** 9.1a, 9.1b, 9.2, 9.3 complete. Phase 8 fully closed.
@@ -32,4 +49,3 @@
 2. Elected set can be smaller than MaxActiveValidators. No minimum-set enforcement.
 3. Mid-epoch stake changes take effect at next epoch boundary only. Document.
 4. No ejection rule — candidate stays elected until leave_candidates. Add in 9.5/9.6.
-

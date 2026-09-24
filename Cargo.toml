@@ -1,8 +1,8 @@
 [workspace.package]
-license = "MIT-0"
+license = "Unlicense"
 authors = ["Parity Technologies <admin@parity.io>"]
-homepage = "https://paritytech.github.io/polkadot-sdk/"
-repository = "https://github.com/paritytech/polkadot-sdk-solochain-template.git"
+homepage = "https://bitcore77-calibre.github.io/calibre-core/"
+repository = "https://github.com/BitCore77-Calibre/calibre-core.git"
 edition = "2021"
 
 [workspace]
