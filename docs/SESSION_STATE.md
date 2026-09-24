@@ -1,6 +1,6 @@
 ## Where we are
 
-- **Baseline:** `ec400e4` on `phase9.4-babe` (BABE runtime and node integration).
+- **Baseline:** `b932a70` on `phase9.4-babe` (BABE runtime and node integration).
 - **Phase:** 9.4 validation in progress. Earlier 9.1-9.3 work remains the baseline.
 - **Verified here:** release node with embedded WASM builds; native workspace tests pass;
   a temporary one-validator BABE node advanced from best block 7 to 10 and
@@ -10,9 +10,6 @@
   peers, advanced from best block 2 to 5 and finalized block 0 to 2, and
   agreed on the finalized hash at block 2. Test identity creation and BABE/
   GRANDPA keystore checks passed with a disposable local identity.
-- **Reported by `ec400e4` commit message:** seven local validators agreed
-  through finalized block 612 and crossed the first 600-slot BABE boundary.
-  This was not reproduced in this validation pass.
 - **Next gate:** validator replacement through the six-session election boundary,
   multi-computer operation, and the planned 21-validator/two-week soak.
 
