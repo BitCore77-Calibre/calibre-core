@@ -20,9 +20,10 @@
 - **Liveness guard:** signed `session.purge_keys` calls are filtered for all
   accounts until a validator-aware exit policy exists. `session.set_keys` remains
   available. Runtime spec version is 101 for this behavior change.
-- **Next gate:** live validator replacement and finality across the six-session
-  election boundary, multi-computer operation, and the planned
-  21-validator/two-week soak.
+- **Lab scope:** keep the current seven-validator cap for this validation. The
+  planned 21-validator/two-week soak is deferred and has not passed.
+- **Next gate:** live seven-validator replacement and finality across the
+  six-session election boundary, then multi-computer operation.
 
 ## Phase 9 progress
 
@@ -54,8 +55,9 @@
    registered session keys. The test covers the missing-key fallback.
 3. Mid-epoch stake changes take effect at next epoch boundary only. Document.
 4. No ejection rule — candidate stays elected until leave_candidates. Add in 9.5/9.6.
-5. `MaxActiveValidators` is 7, so the planned 21-validator soak needs a
-   separate configuration and deployment test before 9.4 can be marked done.
+5. `MaxActiveValidators` remains 7 by user choice for the current private lab.
+   The planned 21-validator soak needs a separate configuration and deployment
+   test before that plan criterion can be marked done.
 6. `session.purge_keys` is filtered for all signed accounts as a temporary
    liveness guard. A future exit policy must allow safe cleanup after a
    validator leaves the active and queued sets.
