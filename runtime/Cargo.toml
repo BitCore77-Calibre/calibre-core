@@ -22,7 +22,7 @@ frame-system-benchmarking = { optional = true, workspace = true }
 frame-system-rpc-runtime-api.workspace = true
 frame-system.workspace = true
 frame-try-runtime = { optional = true, workspace = true }
-pallet-aura.workspace = true
+pallet-babe.workspace = true
 pallet-balances.workspace = true
 pallet-grandpa.workspace = true
 pallet-session.workspace = true
@@ -41,7 +41,7 @@ sp-api.workspace = true
 calibre-primitives = { workspace = true, default-features = false }
 calibre-qutxo-rpc-api = { workspace = true, default-features = false }
 sp-block-builder.workspace = true
-sp-consensus-aura = { features = ["serde"], workspace = true }
+sp-consensus-babe = { features = ["serde"], workspace = true }
 sp-consensus-grandpa = { features = ["serde"], workspace = true }
 sp-core = { features = ["serde"], workspace = true }
 sp-genesis-builder.workspace = true
@@ -70,7 +70,7 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 	"frame-system/std",
 	"frame-try-runtime?/std",
-	"pallet-aura/std",
+	"pallet-babe/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
 	"pallet-session/std",
@@ -89,7 +89,7 @@ std = [
 	"calibre-primitives/std",
 	"calibre-qutxo-rpc-api/std",
 	"sp-block-builder/std",
-	"sp-consensus-aura/std",
+	"sp-consensus-babe/std",
 	"sp-consensus-grandpa/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
@@ -124,7 +124,7 @@ try-runtime = [
 	"frame-support/try-runtime",
 	"frame-system/try-runtime",
 	"frame-try-runtime/try-runtime",
-	"pallet-aura/try-runtime",
+	"pallet-babe/try-runtime",
 	"pallet-balances/try-runtime",
 	"pallet-grandpa/try-runtime",
 	"pallet-session/try-runtime",

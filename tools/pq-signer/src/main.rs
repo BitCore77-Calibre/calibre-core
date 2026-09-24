@@ -9,7 +9,7 @@
 
 mod identity;
 
-use dilithium::{MlDsaKeyPair, ML_DSA_44, DilithiumSignature};
+use dilithium::{DilithiumSignature, MlDsaKeyPair, ML_DSA_44};
 use identity::Identity;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,7 +34,10 @@ fn main() {
         "check" => cmd_check(&args),
         "export-chain-spec" => cmd_export_chain_spec(&args),
 
-        "help" | "--help" | "-h" => { print_help(); Ok(()) }
+        "help" | "--help" | "-h" => {
+            print_help();
+            Ok(())
+        }
         _ => Err(format!("unknown command: {}", cmd)),
     };
 
@@ -50,7 +53,7 @@ fn print_help() {
     eprintln!("Commands:");
     eprintln!("  init --base-path <dir> --name <v1> [--suri <//Alice>]");
     eprintln!("        [--node-bin <path>] [--chain <staging>]");
-    eprintln!("      Generate ML-DSA-44 identity + Aura/GRANDPA/node keys.");
+    eprintln!("      Generate ML-DSA-44 identity + BABE/GRANDPA/node keys.");
     eprintln!("  show --base-path <dir> --name <v1>");
     eprintln!("      Print the public parts of an identity.");
     eprintln!("  check --base-path <dir> --name <v1>");
@@ -105,8 +108,10 @@ fn legacy_verify(args: &[String]) -> Result<(), String> {
     let msg_hex = args.get(3).ok_or("usage: verify <pubkey> <msg> <sig>")?;
     let sig_hex = args.get(4).ok_or("usage: verify <pubkey> <msg> <sig>")?;
     let pk = hex::decode(pk_hex.trim_start_matches("0x")).map_err(|e| format!("pk hex: {}", e))?;
-    let msg = hex::decode(msg_hex.trim_start_matches("0x")).map_err(|e| format!("msg hex: {}", e))?;
-    let sig_bytes = hex::decode(sig_hex.trim_start_matches("0x")).map_err(|e| format!("sig hex: {}", e))?;
+    let msg =
+        hex::decode(msg_hex.trim_start_matches("0x")).map_err(|e| format!("msg hex: {}", e))?;
+    let sig_bytes =
+        hex::decode(sig_hex.trim_start_matches("0x")).map_err(|e| format!("sig hex: {}", e))?;
     let sig = DilithiumSignature::from_bytes(sig_bytes);
     if MlDsaKeyPair::verify(&pk, &sig, &msg, b"", ML_DSA_44) {
         println!("VALID");
@@ -122,7 +127,9 @@ fn legacy_verify(args: &[String]) -> Result<(), String> {
 // ═══════════════════════════════════════════════════════════════
 
 fn parse_flag(args: &[String], flag: &str) -> Option<String> {
-    args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1).cloned())
+    args.iter()
+        .position(|a| a == flag)
+        .and_then(|i| args.get(i + 1).cloned())
 }
 
 fn cmd_init(args: &[String]) -> Result<(), String> {
@@ -135,8 +142,8 @@ fn cmd_init(args: &[String]) -> Result<(), String> {
         .ok_or("init requires --node-bin, or solochain-template-node in PATH or target/release/")?;
     // `chain_alias` is what we pass to the node CLI (e.g. "staging").
     // `chain_id`   is what we use for filesystem paths (e.g. "calibre_staging").
-    let chain_id = resolve_chain_id(&node_bin, &chain_alias)
-        .unwrap_or_else(|_| chain_alias.clone());
+    let chain_id =
+        resolve_chain_id(&node_bin, &chain_alias).unwrap_or_else(|_| chain_alias.clone());
 
     let base = Path::new(&base_path);
     let dir = Identity::dir(base, &name);
@@ -162,14 +169,32 @@ fn cmd_init(args: &[String]) -> Result<(), String> {
     };
     id.save(base)?;
 
-    eprintln!("[2/4] Inserting Aura key (sr25519)");
-    insert_key(&node_bin, &dir, &chain_alias, "sr25519", "aura", suri.as_deref())?;
+    eprintln!("[2/4] Inserting BABE key (sr25519)");
+    insert_key(
+        &node_bin,
+        &dir,
+        &chain_alias,
+        "sr25519",
+        "babe",
+        suri.as_deref(),
+    )?;
 
     eprintln!("[3/4] Inserting GRANDPA key (ed25519)");
-    insert_key(&node_bin, &dir, &chain_alias, "ed25519", "gran", suri.as_deref())?;
+    insert_key(
+        &node_bin,
+        &dir,
+        &chain_alias,
+        "ed25519",
+        "gran",
+        suri.as_deref(),
+    )?;
 
     eprintln!("[4/4] Generating node network key");
-    let net_key = dir.join("chains").join(&chain_id).join("network").join("secret_ed25519");
+    let net_key = dir
+        .join("chains")
+        .join(&chain_id)
+        .join("network")
+        .join("secret_ed25519");
     if !net_key.exists() {
         let status = Command::new(&node_bin)
             .args(["key", "generate-node-key", "--base-path"])
@@ -190,11 +215,19 @@ fn cmd_init(args: &[String]) -> Result<(), String> {
     eprintln!("  name            : {}", name);
     eprintln!("  pq_public_key   : {}", pk_hex);
     eprintln!("  pq_lock_hash    : {}", lock_hex);
-    eprintln!("  identity.json   : {}", Identity::identity_path(base, &name).display());
+    eprintln!(
+        "  identity.json   : {}",
+        Identity::identity_path(base, &name).display()
+    );
     eprintln!();
-    eprintln!("Backup {} and {} — no recovery if lost.",
+    eprintln!(
+        "Backup {} and {} — no recovery if lost.",
         Identity::pq_key_path(base, &name).display(),
-        dir.join("chains").join(&chain_id).join("keystore").display());
+        dir.join("chains")
+            .join(&chain_id)
+            .join("keystore")
+            .display()
+    );
     Ok(())
 }
 
@@ -225,7 +258,9 @@ fn insert_key(
         .arg(base_dir)
         .args(["--chain", chain, "--scheme", scheme, "--key-type", key_type]);
     match suri {
-        Some(s) => { cmd.args(["--suri", s]); }
+        Some(s) => {
+            cmd.args(["--suri", s]);
+        }
         None => {
             return Err(format!(
                 "no --suri provided for {}:{} — deterministic keys require a suri",
@@ -233,7 +268,9 @@ fn insert_key(
             ));
         }
     }
-    let status = cmd.status().map_err(|e| format!("spawn key insert: {}", e))?;
+    let status = cmd
+        .status()
+        .map_err(|e| format!("spawn key insert: {}", e))?;
     if !status.success() {
         return Err(format!("key insert {}:{} failed", scheme, key_type));
     }
@@ -259,9 +296,11 @@ fn cmd_check(args: &[String]) -> Result<(), String> {
     let chain_alias = parse_flag(args, "--chain").unwrap_or_else(|| "staging".into());
     let node_bin = parse_flag(args, "--node-bin")
         .or_else(find_node_binary)
-        .ok_or("check requires --node-bin, or solochain-template-node in PATH or target/release/")?;
-    let chain_id = resolve_chain_id(&node_bin, &chain_alias)
-        .unwrap_or_else(|_| "calibre_staging".into());  // fallback for tests
+        .ok_or(
+            "check requires --node-bin, or solochain-template-node in PATH or target/release/",
+        )?;
+    let chain_id =
+        resolve_chain_id(&node_bin, &chain_alias).unwrap_or_else(|_| "calibre_staging".into()); // fallback for tests
     let base = Path::new(&base_path);
     let dir = Identity::dir(base, &name);
 
@@ -269,9 +308,14 @@ fn cmd_check(args: &[String]) -> Result<(), String> {
     {
         let mut report = |label: &str, ok: bool| {
             println!("  [{:>4}] {}", if ok { "ok" } else { "FAIL" }, label);
-            if !ok { all_ok = false; }
+            if !ok {
+                all_ok = false;
+            }
         };
-        report("identity.json", Identity::identity_path(base, &name).exists());
+        report(
+            "identity.json",
+            Identity::identity_path(base, &name).exists(),
+        );
         report("pq.key", Identity::pq_key_path(base, &name).exists());
         report("pq.pub", Identity::pq_pub_path(base, &name).exists());
 
@@ -280,18 +324,24 @@ fn cmd_check(args: &[String]) -> Result<(), String> {
             if let Ok(entries) = fs::read_dir(&keystore) {
                 for entry in entries.flatten() {
                     if let Some(n) = entry.file_name().to_str() {
-                        if n.starts_with(prefix) { return true; }
+                        if n.starts_with(prefix) {
+                            return true;
+                        }
                     }
                 }
             }
             false
         };
-        let aura_prefix = hex::encode(b"aura");
+        let babe_prefix = hex::encode(b"babe");
         let gran_prefix = hex::encode(b"gran");
-        report("aura keystore", has_prefix(&aura_prefix));
+        report("babe keystore", has_prefix(&babe_prefix));
         report("gran keystore", has_prefix(&gran_prefix));
 
-        let net_key = dir.join("chains").join(&chain_id).join("network").join("secret_ed25519");
+        let net_key = dir
+            .join("chains")
+            .join(&chain_id)
+            .join("network")
+            .join("secret_ed25519");
         report("node network key", net_key.exists());
     }
 
@@ -312,7 +362,12 @@ fn cmd_check(args: &[String]) -> Result<(), String> {
 /// the spec and read the id back.
 fn resolve_chain_id(node_bin: &str, chain_alias: &str) -> Result<String, String> {
     let out = Command::new(node_bin)
-        .args(["build-spec", "--chain", chain_alias, "--disable-default-bootnode"])
+        .args([
+            "build-spec",
+            "--chain",
+            chain_alias,
+            "--disable-default-bootnode",
+        ])
         .stderr(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("spawn build-spec: {}", e))?;
@@ -334,7 +389,10 @@ fn resolve_chain_id(node_bin: &str, chain_alias: &str) -> Result<String, String>
             }
         }
     }
-    Err(format!("could not parse chain id from build-spec output for {}", chain_alias))
+    Err(format!(
+        "could not parse chain id from build-spec output for {}",
+        chain_alias
+    ))
 }
 
 /// Extract a pubkey hex string from a keystore filename.
@@ -342,8 +400,8 @@ fn resolve_chain_id(node_bin: &str, chain_alias: &str) -> Result<String, String>
 /// Returns the pubkey hex (everything after the 8-char prefix).
 fn read_keystore_pubkey(keystore: &Path, key_type: &str) -> Result<String, String> {
     let prefix = hex::encode(key_type.as_bytes());
-    let entries = fs::read_dir(keystore)
-        .map_err(|e| format!("read {}: {}", keystore.display(), e))?;
+    let entries =
+        fs::read_dir(keystore).map_err(|e| format!("read {}: {}", keystore.display(), e))?;
     for entry in entries.flatten() {
         if let Some(name) = entry.file_name().to_str() {
             if name.starts_with(&prefix) {
@@ -351,7 +409,11 @@ fn read_keystore_pubkey(keystore: &Path, key_type: &str) -> Result<String, Strin
             }
         }
     }
-    Err(format!("no {} key found in {}", key_type, keystore.display()))
+    Err(format!(
+        "no {} key found in {}",
+        key_type,
+        keystore.display()
+    ))
 }
 
 /// hex (32 bytes) -> SS58 address for sr25519.
@@ -359,7 +421,9 @@ fn sr25519_hex_to_ss58(hex_str: &str) -> Result<String, String> {
     use sp_core::crypto::Ss58Codec;
     use sp_core::sr25519::Public;
     let bytes = hex::decode(hex_str).map_err(|e| format!("hex: {}", e))?;
-    let arr: [u8; 32] = bytes.as_slice().try_into()
+    let arr: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
         .map_err(|_| format!("expected 32 bytes, got {}", bytes.len()))?;
     Ok(Public::from_raw(arr).to_ss58check())
 }
@@ -369,13 +433,16 @@ fn ed25519_hex_to_ss58(hex_str: &str) -> Result<String, String> {
     use sp_core::crypto::Ss58Codec;
     use sp_core::ed25519::Public;
     let bytes = hex::decode(hex_str).map_err(|e| format!("hex: {}", e))?;
-    let arr: [u8; 32] = bytes.as_slice().try_into()
+    let arr: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
         .map_err(|_| format!("expected 32 bytes, got {}", bytes.len()))?;
     Ok(Public::from_raw(arr).to_ss58check())
 }
 
 fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
-    let base_path = parse_flag(args, "--base-path").ok_or("export-chain-spec requires --base-path")?;
+    let base_path =
+        parse_flag(args, "--base-path").ok_or("export-chain-spec requires --base-path")?;
     let template = parse_flag(args, "--template").unwrap_or_else(|| "staging".into());
     let out = parse_flag(args, "--out").ok_or("export-chain-spec requires --out")?;
     let node_bin = parse_flag(args, "--node-bin")
@@ -386,18 +453,27 @@ fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
     let mut validators: Vec<String> = Vec::new();
     if let Some(i) = args.iter().position(|a| a == "--validators") {
         for a in &args[i + 1..] {
-            if a.starts_with("--") { break; }
+            if a.starts_with("--") {
+                break;
+            }
             validators.push(a.clone());
         }
     }
     if validators.is_empty() {
-        return Err("export-chain-spec requires at least one validator name after --validators".into());
+        return Err(
+            "export-chain-spec requires at least one validator name after --validators".into(),
+        );
     }
 
     // 1. Get the base spec.
     eprintln!("[1/3] Building base spec (template = {})", template);
     let out_spec = Command::new(&node_bin)
-        .args(["build-spec", "--chain", &template, "--disable-default-bootnode"])
+        .args([
+            "build-spec",
+            "--chain",
+            &template,
+            "--disable-default-bootnode",
+        ])
         .stderr(std::process::Stdio::null())
         .output()
         .map_err(|e| format!("spawn build-spec: {}", e))?;
@@ -413,29 +489,38 @@ fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
     // 2. Collect authority keys from each validator.
     eprintln!("[2/3] Collecting authority keys");
     let base = Path::new(&base_path);
-    let chain_id = resolve_chain_id(&node_bin, &template)
-        .unwrap_or_else(|_| "calibre_staging".into());
+    let chain_id =
+        resolve_chain_id(&node_bin, &template).unwrap_or_else(|_| "calibre_staging".into());
 
-    let mut aura_ss58: Vec<String> = Vec::new();
-    let mut grandpa_ss58: Vec<serde_json::Value> = Vec::new();
+    let mut babe_ss58: Vec<String> = Vec::new();
+    let mut grandpa_ss58: Vec<String> = Vec::new();
     let mut account_ss58: Vec<String> = Vec::new();
 
     for name in &validators {
         let dir = Identity::dir(base, name);
         let keystore = dir.join("chains").join(&chain_id).join("keystore");
         if !keystore.exists() {
-            return Err(format!("keystore missing for validator {}: {}", name, keystore.display()));
+            return Err(format!(
+                "keystore missing for validator {}: {}",
+                name,
+                keystore.display()
+            ));
         }
-        let aura_hex = read_keystore_pubkey(&keystore, "aura")?;
+        let babe_hex = read_keystore_pubkey(&keystore, "babe")?;
         let gran_hex = read_keystore_pubkey(&keystore, "gran")?;
-        let aura_ss = sr25519_hex_to_ss58(&aura_hex)?;
+        let babe_ss = sr25519_hex_to_ss58(&babe_hex)?;
         let gran_ss = ed25519_hex_to_ss58(&gran_hex)?;
         // The validator's account ID is their sr25519 pubkey, same encoding.
-        let account_ss = aura_ss.clone();
+        let account_ss = babe_ss.clone();
 
-        eprintln!("      {}: aura={} grandpa={}", name, &aura_ss[..12], &gran_ss[..12]);
-        aura_ss58.push(aura_ss);
-        grandpa_ss58.push(serde_json::json!([gran_ss, 1]));
+        eprintln!(
+            "      {}: babe={} grandpa={}",
+            name,
+            &babe_ss[..12],
+            &gran_ss[..12]
+        );
+        babe_ss58.push(babe_ss);
+        grandpa_ss58.push(gran_ss);
         account_ss58.push(account_ss);
     }
 
@@ -446,11 +531,22 @@ fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
         .as_object_mut()
         .ok_or("missing genesis.runtimeGenesis.patch")?;
 
-    // aura.authorities
-    patch["aura"]["authorities"] = serde_json::json!(aura_ss58);
-
-    // grandpa.authorities
-    patch["grandpa"]["authorities"] = serde_json::json!(grandpa_ss58);
+    // pallet-session is the single source of truth for BABE and GRANDPA
+    // authorities. Direct authority lists stay empty to avoid double init.
+    let session_keys: Vec<serde_json::Value> = account_ss58
+        .iter()
+        .zip(babe_ss58.iter().zip(grandpa_ss58.iter()))
+        .map(|(account, (babe, grandpa))| {
+            serde_json::json!([
+                account,
+                account,
+                { "babe": babe, "grandpa": grandpa }
+            ])
+        })
+        .collect();
+    patch["babe"]["authorities"] = serde_json::json!([]);
+    patch["grandpa"]["authorities"] = serde_json::json!([]);
+    patch["session"]["keys"] = serde_json::json!(session_keys);
 
     // Balances: leave as the template spec's default. The base staging
     // preset already endows the sp_keyring accounts (Alice..Ferdie+One),
@@ -468,24 +564,30 @@ fn cmd_export_chain_spec(args: &[String]) -> Result<(), String> {
     }
 
     // Update the spec's name + id for the new chain.
-    spec["name"] = serde_json::json!(format!("Calibre {} ({} validators)", template, validators.len()));
+    spec["name"] = serde_json::json!(format!(
+        "Calibre {} ({} validators)",
+        template,
+        validators.len()
+    ));
     spec["id"] = serde_json::json!(format!("calibre_{}", template));
 
     // Write.
-    let out_str = serde_json::to_string_pretty(&spec)
-        .map_err(|e| format!("serialize: {}", e))?;
+    let out_str = serde_json::to_string_pretty(&spec).map_err(|e| format!("serialize: {}", e))?;
     fs::write(&out, out_str).map_err(|e| format!("write {}: {}", out, e))?;
 
     eprintln!();
     eprintln!("Wrote chain spec:");
     eprintln!("  output      : {}", out);
     eprintln!("  validators  : {}", validators.len());
-    eprintln!("  aura keys   : {}", aura_ss58.len());
+    eprintln!("  babe keys   : {}", babe_ss58.len());
     eprintln!("  grandpa keys: {}", grandpa_ss58.len());
     eprintln!("  sudo        : {}", account_ss58[0]);
     eprintln!();
     eprintln!("Boot with:");
-    eprintln!("  solochain-template-node --chain {} --validator --name <name> \\", out);
+    eprintln!(
+        "  solochain-template-node --chain {} --validator --name <name> \\",
+        out
+    );
     eprintln!("      --base-path <path-to-that-validators-base>");
     Ok(())
 }

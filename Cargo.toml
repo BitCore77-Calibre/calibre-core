@@ -42,7 +42,7 @@ pallet-stake = { path = "pallets/stake", default-features = false }
 solochain-template-runtime = { path = "./runtime", default-features = false }
 pallet-template = { path = "./pallets/template", default-features = false }
 clap = { version = "4.5.13" }
-frame-benchmarking-cli = { version = "47.0.0", default-features = false }
+frame-benchmarking-cli = { version = "=47.0.0", default-features = false }
 frame-metadata-hash-extension = { version = "0.8.0", default-features = false }
 frame-system = { version = "40.1.0", default-features = false }
 futures = { version = "0.3.31" }
@@ -50,22 +50,24 @@ jsonrpsee = { version = "0.24.3" }
 pallet-transaction-payment = { version = "40.0.0", default-features = false }
 pallet-transaction-payment-rpc = { version = "43.0.0", default-features = false }
 sc-basic-authorship = { version = "0.49.0", default-features = false }
-sc-cli = { version = "0.51.0", default-features = false }
+sc-cli = { version = "=0.51.0", default-features = false }
 sc-client-api = { version = "39.0.0", default-features = false }
 sc-consensus = { version = "0.48.0", default-features = false }
-sc-consensus-aura = { version = "0.49.0", default-features = false }
+sc-consensus-babe = { version = "=0.49.0", default-features = false }
 sc-consensus-grandpa = { version = "0.34.0", default-features = false }
 sc-executor = { version = "0.42.0", default-features = false }
-sc-network = { version = "0.49.1", default-features = false }
-sc-offchain = { version = "44.0.0", default-features = false }
-sc-service = { version = "0.50.0", default-features = false }
+sc-network = { version = "=0.49.1", default-features = false }
+# sc-network 0.49.1 requires the Kademlia types removed by sc-network-types 0.15.5.
+sc-network-types = { version = "=0.15.3", default-features = false }
+sc-offchain = { version = "=44.0.0", default-features = false }
+sc-service = { version = "=0.50.0", default-features = false }
 sc-telemetry = { version = "28.1.0", default-features = false }
 sc-transaction-pool = { version = "39.0.0", default-features = false }
 sc-transaction-pool-api = { version = "39.0.0", default-features = false }
 sp-api = { version = "36.0.1", default-features = false }
 sp-block-builder = { version = "36.0.0", default-features = false }
 sp-blockchain = { version = "39.0.0", default-features = false }
-sp-consensus-aura = { version = "0.42.0", default-features = false }
+sp-consensus-babe = { version = "=0.42.1", default-features = false }
 sp-core = { version = "36.1.0", default-features = false }
 sp-genesis-builder = { version = "0.17.0", default-features = false }
 sp-inherents = { version = "36.0.0", default-features = false }
@@ -82,7 +84,7 @@ frame-support = { version = "40.1.0", default-features = false }
 frame-system-benchmarking = { version = "40.0.0", default-features = false }
 frame-system-rpc-runtime-api = { version = "36.0.0", default-features = false }
 frame-try-runtime = { version = "0.46.0", default-features = false }
-pallet-aura = { version = "39.0.0", default-features = false }
+pallet-babe = { version = "=40.0.0", default-features = false }
 pallet-balances = { version = "41.1.0", default-features = false }
 pallet-grandpa = { version = "40.0.0", default-features = false }
 pallet-session = { version = "40.0.0", default-features = false }
@@ -109,3 +111,12 @@ codegen-units = 1
 inherits = "release"
 lto = true
 
+
+
+
+
+
+
+
+[patch.crates-io]
+core2 = { version = "0.4.0", git = "https://github.com/bbqsrc/core2", rev = "545e84bcb0f235b12e21351e0c69767958efe2a7" }
