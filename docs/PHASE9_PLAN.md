@@ -74,9 +74,10 @@ Deliverables:
 
 ## 9.4 — Aura to BABE migration
 
-Why: Aura is round-robin. Every validator gets a slot regardless of
-stake. That caps the validator set at ~12 (the O(n^2) inflection).
-BABE is slot-lottery weighted by stake. Scales to 100+.
+Why: Aura assigns authors in round-robin order. BABE uses a VRF slot lottery
+and permits competing blocks in a slot. The current runtime gives each BABE
+authority weight 1; stake weighting is a separate Phase 9.5 deliverable.
+Larger validator sets still need network and finality testing.
 
 What changes:
 - Remove pallet-aura, add pallet-babe.

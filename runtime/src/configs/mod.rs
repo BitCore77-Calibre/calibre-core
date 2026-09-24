@@ -259,11 +259,9 @@ impl pallet_calibre_fees::Config for Runtime {
 //   - Session 0 (genesis) returns `None`. The genesis-set authorities
 //     (from pallet_babe::Authorities and pallet_grandpa::Authorities)
 //     remain in place.
-//   - If no candidates are elected (empty registry or all zero-stake),
-//     returns `None` — no disruption.
-//   - Session pallet filters elected validators by `NextKeys` storage.
-//     Validators without a registered session key are silently dropped
-//     from the authority set; they must call `session.set_keys` first.
+//   - Keep the existing set unless a full replacement has registered keys.
+//     Session filters missing keys, so a partial set could otherwise reduce
+//     BABE authors and GRANDPA voters without warning.
 
 parameter_types! {
     /// BABE/session epochs per validator election cycle.
@@ -298,9 +296,13 @@ impl pallet_session::SessionManager<AccountId> for CalibreSessionManager {
         // Epoch boundary — re-elect from the candidate registry.
         let elected = crate::Stake::elect_top_n(MaxActiveValidators::get());
 
-        // Empty election result: keep the current set rather than
-        // collapsing the validator set to zero.
-        if elected.is_empty() {
+        // Session silently drops elected accounts without NextKeys. Do not
+        // replace the seven-authority set with fewer usable authorities.
+        if elected.len() != MaxActiveValidators::get() as usize
+            || elected
+                .iter()
+                .any(|validator| !pallet_session::NextKeys::<Runtime>::contains_key(validator))
+        {
             return None;
         }
 
@@ -331,7 +333,73 @@ impl pallet_session::Config for Runtime {
 
 #[cfg(test)]
 mod session_rotation_tests {
-    use super::is_epoch_boundary;
+    use super::{is_epoch_boundary, CalibreSessionManager};
+    use crate::{AccountId, Runtime, SessionKeys};
+    use pallet_session::SessionManager;
+    use sp_keyring::{Ed25519Keyring, Sr25519Keyring};
+
+    fn register_candidates(count: usize, keys: usize) -> Vec<AccountId> {
+        let identities = [
+            (Sr25519Keyring::Alice, Ed25519Keyring::Alice),
+            (Sr25519Keyring::Bob, Ed25519Keyring::Bob),
+            (Sr25519Keyring::Charlie, Ed25519Keyring::Charlie),
+            (Sr25519Keyring::Dave, Ed25519Keyring::Dave),
+            (Sr25519Keyring::Eve, Ed25519Keyring::Eve),
+            (Sr25519Keyring::Ferdie, Ed25519Keyring::Ferdie),
+            (Sr25519Keyring::One, Ed25519Keyring::One),
+        ];
+        identities
+            .into_iter()
+            .take(count)
+            .enumerate()
+            .map(|(index, (sr, ed))| {
+                let account = sr.to_account_id();
+                pallet_stake::Stake::<Runtime>::insert(
+                    &account,
+                    1_000_000_000_000_000_000_000u128 + index as u128,
+                );
+                pallet_stake::Candidates::<Runtime>::insert(&account, ());
+                if index < keys {
+                    pallet_session::NextKeys::<Runtime>::insert(
+                        &account,
+                        SessionKeys {
+                            babe: sr.public().into(),
+                            grandpa: ed.public().into(),
+                        },
+                    );
+                }
+                account
+            })
+            .collect()
+    }
+
+    #[test]
+    fn election_keeps_current_set_when_only_six_candidates_exist() {
+        sp_io::TestExternalities::default().execute_with(|| {
+            register_candidates(6, 6);
+            assert_eq!(CalibreSessionManager::new_session(6), None);
+        });
+    }
+
+    #[test]
+    fn election_keeps_current_set_when_a_candidate_lacks_keys() {
+        sp_io::TestExternalities::default().execute_with(|| {
+            register_candidates(7, 6);
+            assert_eq!(CalibreSessionManager::new_session(6), None);
+        });
+    }
+
+    #[test]
+    fn election_accepts_seven_candidates_with_keys_at_boundary() {
+        sp_io::TestExternalities::default().execute_with(|| {
+            let accounts = register_candidates(7, 7);
+            assert_eq!(CalibreSessionManager::new_session(5), None);
+            assert_eq!(
+                CalibreSessionManager::new_session(6),
+                Some(accounts.into_iter().rev().collect())
+            );
+        });
+    }
 
     #[test]
     fn session_zero_is_not_a_boundary() {

@@ -1,6 +1,6 @@
 # Validator Onboarding
 
-**Status:** Live as of Phase 9.1a.
+**Status:** Testnet tooling; Phase 9.4 BABE integration under validation.
 **Tool:** `calibre-keygen` (shipped alongside `solochain-template-node`).
 
 ## Overview
@@ -13,13 +13,17 @@ Everything is local. Nothing is sent over the network during keygen.
 Public parts go into a chain spec; private parts stay on the validator's
 machine.
 
+The `//Alice` example below is for an isolated testnet. The current tool passes
+`--suri` through process arguments, where other local processes may see it.
+Production key provisioning needs a safer input path.
+
 ## Prerequisites
 
 1. `solochain-template-node` — build: `cargo build --release -p solochain-template-node`
 2. `calibre-keygen` — build: `cargo build --release -p pq-signer`
 3. A base path directory for the validator
 
-`calibre-keygen` calls the node binary for Aura, GRANDPA, and node network
+`calibre-keygen` calls the node binary for BABE, GRANDPA, and node network
 key generation. It finds the node via `--node-bin <path>`, the current
 directory (`target/release/`), or `PATH`.
 
@@ -37,11 +41,12 @@ Flags:
 |------|----------|---------|
 | `--base-path` | yes | Where the validator's keys and chain data live |
 | `--name` | yes | Short validator name (used for directory naming) |
-| `--suri` | yes* | Secret URI for Aura and GRANDPA keys |
+| `--suri` | yes* | Secret URI for BABE and GRANDPA keys |
 | `--chain` | no | Chain alias. Default `staging` |
 | `--node-bin` | no | Path to `solochain-template-node` |
 
-*suri required in 9.1a. Random generation for production lands in 9.1b.
+*The current tool requires a SURI. Use only disposable test identities with
+this command-line flow; `//Alice` is a public test identity.
 
 ## Files written
 
@@ -52,7 +57,7 @@ Flags:
     └── chains/
         └── calibre_staging/
             ├── keystore/
-            │   ├── 61757261...    (Aura sr25519 — SECRET)
+            │   ├── 62616265...    (BABE sr25519 — SECRET)
             │   └── 6772616e...    (GRANDPA ed25519 — SECRET)
             └── network/
                 └── secret_ed25519 (libp2p network — SECRET)
@@ -76,7 +81,7 @@ Checks all six required files exist. Output:
       [  ok] identity.json
       [  ok] pq.key
       [  ok] pq.pub
-      [  ok] aura keystore
+      [  ok] babe keystore
       [  ok] gran keystore
       [  ok] node network key
 
@@ -116,8 +121,9 @@ Both `pq-signer` and `calibre-keygen` ship the same code.
 **Can two validators share a --name?** No. Name determines the base-path
 subdirectory.
 
-**What is --suri?** Secret URI. `//Alice` derives Alice's known keys
-deterministically. Random generation lands in 9.1b+.
+**What is --suri?** Secret URI. `//Alice` derives Alice's publicly known
+test keys deterministically. The current command-line input path is for
+isolated testnet use.
 
 **Where does --chain staging map on disk?** `chains/calibre_staging/`.
 CLI alias is `staging`; on-disk chain ID is `calibre_staging`.
