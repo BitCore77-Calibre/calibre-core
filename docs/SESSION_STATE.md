@@ -15,15 +15,21 @@
   candidate registrations with seeded test stake replaced one of seven
   validators after the queued session delay. Runtime tests checked the active
   BABE and GRANDPA authority sets, the missing-key fallback, and the fee author
-  mapping. These tests simulate session transitions; live finality after
-  replacement is still open.
+  mapping. These tests simulate session transitions.
+- **Accelerated live handoff:** a separate eight-node local lab (seven active
+  validators and one standby) used a three-slot BABE epoch to reach session 6.
+  One validator was replaced while the active, BABE, and GRANDPA sets stayed
+  at seven. All eight nodes advanced to best block 19, finalized block 17,
+  and agreed on its hash after the handoff. This disposable lab forced the
+  replacement in its session manager; it did not exercise live stake election
+  or the production 600-slot session duration.
 - **Liveness guard:** signed `session.purge_keys` calls are filtered for all
   accounts until a validator-aware exit policy exists. `session.set_keys` remains
   available. Runtime spec version is 101 for this behavior change.
 - **Lab scope:** keep the current seven-validator cap for this validation. The
   planned 21-validator/two-week soak is deferred and has not passed.
-- **Next gate:** live seven-validator replacement and finality across the
-  six-session election boundary, then multi-computer operation.
+- **Next gate:** live stake-driven replacement and finality with the normal
+  600-slot session duration, then multi-computer operation.
 
 ## Phase 9 progress
 
@@ -49,8 +55,9 @@
 ## Open follow-ups
 
 1. The runtime integration test covers signed key registration, election, and
-   simulated activation at session 6. A live network replacement with continuing
-   block production and GRANDPA finality remains untested.
+   simulated activation at session 6. The accelerated local lab covers a forced
+   replacement with continued block production and GRANDPA finality. Live
+   stake-driven election at the normal session duration remains untested.
 2. The election guard keeps the current set unless the top seven candidates have
    registered session keys. The test covers the missing-key fallback.
 3. Mid-epoch stake changes take effect at next epoch boundary only. Document.
