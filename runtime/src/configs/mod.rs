@@ -26,7 +26,7 @@
 // Substrate and Polkadot dependencies
 use frame_support::{
     derive_impl, parameter_types,
-    traits::{ConstU128, ConstU32, ConstU64, ConstU8, VariantCountOf},
+    traits::{ConstU128, ConstU32, ConstU64, ConstU8, Contains, VariantCountOf},
     weights::{
         constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
         IdentityFee, Weight,
@@ -59,11 +59,26 @@ parameter_types! {
     pub const SS58Prefix: u8 = 42;
 }
 
+/// Until validator exits are coordinated with queued session keys, any signed
+/// `purge_keys` could remove an active authority at the next rotation. Keep
+/// registrations and key replacement available, but reject key purges.
+pub struct SessionKeyLivenessFilter;
+
+impl Contains<RuntimeCall> for SessionKeyLivenessFilter {
+    fn contains(call: &RuntimeCall) -> bool {
+        !matches!(
+            call,
+            RuntimeCall::Session(pallet_session::Call::purge_keys { .. })
+        )
+    }
+}
+
 /// The default types are being injected by [`derive_impl`](`frame_support::derive_impl`) from
 /// [`SoloChainDefaultConfig`](`struct@frame_system::config_preludes::SolochainDefaultConfig`),
 /// but overridden as needed.
 #[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
 impl frame_system::Config for Runtime {
+    type BaseCallFilter = SessionKeyLivenessFilter;
     /// The block type for the runtime.
     type Block = Block;
     /// Block & extrinsics weights: base values and limits.
@@ -453,3 +468,6 @@ mod session_rotation_tests {
         assert!(is_epoch_boundary(100, 1));
     }
 }
+
+#[cfg(test)]
+mod session_integration_tests;

@@ -17,6 +17,11 @@ The `//Alice` example below is for an isolated testnet. The current tool passes
 `--suri` through process arguments, where other local processes may see it.
 Production key provisioning needs a safer input path.
 
+During Phase 9.4, the runtime rejects signed `session.purge_keys` calls so an
+active validator cannot silently shrink the next authority set. Use
+`session.set_keys` to rotate keys. Key cleanup after validator exit is not yet
+available; wait for a validator-aware exit policy before relying on it.
+
 ## Prerequisites
 
 1. `solochain-template-node` — build: `cargo build --release -p solochain-template-node`
